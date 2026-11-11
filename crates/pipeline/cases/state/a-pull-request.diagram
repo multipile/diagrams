@@ -1,0 +1,17 @@
+diagram state version=1 {
+  title "A pull request into a protected main"
+  desc "A pull request is opened as a draft or ready, reviewed, and merged once it is approved; changes send it back to review."
+  flow down
+
+  state draft "Draft" start=#true
+  state ready "Ready"
+  state approved "Approved" focal=#true
+  state merged "Merged" end=#true
+  state closed "Closed" end=#true
+
+  transition draft ready on="ready"
+  transition ready approved on="approve"
+  transition approved ready on="push" action="dismiss"
+  transition approved merged on="merge"
+  transition ready closed on="close"
+}

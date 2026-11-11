@@ -1,0 +1,22 @@
+// diff: added=0 removed=0 changed=1
+diagram architecture version=1 {
+  title "How a pull request is shown by pile"
+  desc "The action runs pile gitdiff on the pull request, keeps one comment, and hands a prompt to the agent that reviews it."
+  flow right
+
+  box pr "pull request" as=input
+  box action "the action" sub="generate-pile-diff-action" focal=#true
+  box pile "pile gitdiff" sub="the cli"
+  box comment "sticky comment"
+  box agent "review agent" as=external
+
+  tier pr
+  tier action
+  tier pile
+  tier agent comment
+
+  line pr action label="opened"
+  line action pile label="run"
+  line action comment label="summary"
+  line action agent label="prompt" kind=optional
+}

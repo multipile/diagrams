@@ -1,0 +1,23 @@
+[package]
+name = "diagram-pipeline"
+description = "Takes a diagram from its file to a picture, and the tests that run every step end to end"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "diagram"
+path = "src/main.rs"
+
+[dependencies]
+diagram-format.workspace = true
+diagram-document.workspace = true
+diagram-html.workspace = true
+diagram-render.workspace = true
+
+[dev-dependencies]
+png.workspace = true
+gif.workspace = true

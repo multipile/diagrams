@@ -1,0 +1,15 @@
+// expect: over-limit at 14:3
+diagram dependency version=1 {
+  title "Ten boxes"
+  desc "A dependency diagram holds at most nine."
+  box a
+  box b
+  box c
+  box d
+  box e
+  box f
+  box g
+  box h
+  box i
+  box j
+}

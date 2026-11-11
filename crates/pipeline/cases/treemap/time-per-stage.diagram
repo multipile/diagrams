@@ -1,0 +1,11 @@
+diagram treemap version=1 {
+  title "Where a render spends its time"
+  desc "Rasterising the frames takes most of the time, encoding them most of the rest, and reading and laying out almost none."
+  measure "milliseconds per animation"
+  source "one reveal of a dependency diagram"
+
+  part raster "rasterise" value=410.5
+  part encode "encode GIF" value=220.25 focal=#true
+  part layout "layout" value=12.5 short=LAY
+  part read "read" value=1.5 short=RED
+}

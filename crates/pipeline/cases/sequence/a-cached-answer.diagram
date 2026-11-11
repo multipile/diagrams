@@ -1,0 +1,17 @@
+diagram sequence version=1 {
+  title "A read answered from the cache"
+  desc "The server checks its own cache before it asks storage, and only asks when the cache has no answer."
+
+  actor client "client"
+  actor server "server"
+  actor storage "storage" as=store
+
+  call client server "read pile"
+  self server "check cache"
+  opt "cache miss" {
+    call server storage "get blobs"
+    reply storage server "blobs"
+    self server "fill cache" focal=#true
+  }
+  reply server client "pile"
+}

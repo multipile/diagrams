@@ -1,0 +1,6 @@
+// expect: version-missing at 2:1
+diagram tree {
+  title "A diagram with no version"
+  desc "The reader cannot know which words the file uses."
+  item "root"
+}

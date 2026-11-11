@@ -1,0 +1,21 @@
+diagram swimlane version=1 {
+  title "How a release of the cli reaches Homebrew"
+  desc "A tag on the cli builds the binaries, the release publishes them, and a bot opens and merges the tap's pull request."
+
+  lane maintainer "Maintainer" {
+    step tag "Tag a version"
+  }
+  lane cli "cli CI" {
+    step build "Build binaries" sub="every platform"
+    step release "Publish release"
+  }
+  lane tap "tap bot" {
+    step bump "Open tap PR" sub="the formula"
+    step merged "Merge" focal=#true
+  }
+
+  line tag build label="v0.x.y"
+  line build release
+  line release bump label="dispatch"
+  line bump merged
+}

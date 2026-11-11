@@ -1,0 +1,17 @@
+diagram tree version=1 {
+  title "How this repository is laid out"
+  desc "The repository holds a crate for each step of the pipeline, and the cases the tests run."
+  flow right
+
+  item "diagrams" pile="@diagrams" focal=#true {
+    item "crates/" {
+      item "format/"
+      item "document/"
+      item "html/"
+      item "render/"
+      item "pipeline/"
+    }
+    item "cases/" sub="in crates/pipeline"
+    item "flake.nix"
+  }
+}

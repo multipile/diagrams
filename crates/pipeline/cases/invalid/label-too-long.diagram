@@ -1,0 +1,10 @@
+// expect: too-long at 9:3
+diagram swimlane version=1 {
+  title "A label too long for a line"
+  desc "A label is at most fourteen characters."
+  lane a "A" {
+    step one "One"
+    step two "Two"
+  }
+  line one two label="a label far too long"
+}

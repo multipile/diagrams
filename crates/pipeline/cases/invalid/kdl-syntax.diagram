@@ -1,0 +1,6 @@
+// expect: kdl-syntax at 5:8
+diagram tree version=1 {
+  title "Not KDL"
+  desc "A path is not quoted."
+  item crates/pile
+}

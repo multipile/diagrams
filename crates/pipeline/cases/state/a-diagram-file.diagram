@@ -1,0 +1,21 @@
+diagram state version=1 {
+  title "A diagram file, as the pipeline sees it"
+  desc "A file is read into a diagram, refused when it breaks a rule, and rendered; editing a rendered file makes it stale."
+  note "Only a file that reads is ever rendered."
+  flow right
+
+  state written "Written" sub="a .diagram file" start=#true
+  state read "Read" sub="a diagram"
+  state refused "Refused" sub="has findings"
+  state rendered "Rendered"
+  state stale "Stale" sub="edited since"
+  state deleted "Deleted" end=#true
+
+  transition written read on="read"
+  transition written refused on="read" guard="breaks a rule"
+  transition refused written on="fix"
+  transition read rendered on="render"
+  transition rendered stale on="edit"
+  transition stale rendered on="render" focal=#true
+  any deleted on="git rm"
+}

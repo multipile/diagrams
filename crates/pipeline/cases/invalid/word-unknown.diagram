@@ -1,0 +1,6 @@
+// expect: word-unknown at 5:11
+diagram dependency version=1 {
+  title "A look that does not exist"
+  desc "stroe is near store."
+  box cli as=stroe
+}

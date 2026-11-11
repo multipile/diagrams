@@ -1,0 +1,16 @@
+[package]
+name = "diagram-render"
+description = "Renders a diagram's document with takumi, built as takumi's nodes, to a still or an animated picture"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+diagram-document.workspace = true
+takumi.workspace = true
+
+[dev-dependencies]
+png.workspace = true

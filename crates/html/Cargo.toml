@@ -1,0 +1,16 @@
+[package]
+name = "diagram-html"
+description = "Writes a diagram's document as a self-contained HTML page, still or animated"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+diagram-document.workspace = true
+base64.workspace = true
+
+[dev-dependencies]
+diagram-format.workspace = true

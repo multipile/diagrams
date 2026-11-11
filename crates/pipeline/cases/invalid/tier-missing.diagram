@@ -1,0 +1,9 @@
+// expect: tier-missing at 7:3
+diagram architecture version=1 {
+  title "A box in no tier"
+  desc "Every box that no box holds is in a tier."
+  flow right
+  box a
+  box b
+  tier a
+}

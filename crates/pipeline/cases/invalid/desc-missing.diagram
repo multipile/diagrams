@@ -1,0 +1,5 @@
+// expect: desc-missing at 2:1
+diagram tree version=1 {
+  title "No description"
+  item "root"
+}

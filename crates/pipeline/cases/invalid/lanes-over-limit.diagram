@@ -1,0 +1,11 @@
+// expect: over-limit at 10:3
+diagram swimlane version=1 {
+  title "Six lanes"
+  desc "A swimlane holds at most five."
+  lane a { step a1 }
+  lane b { step b1 }
+  lane c { step c1 }
+  lane d { step d1 }
+  lane e { step e1 }
+  lane f { step f1 }
+}

@@ -1,0 +1,12 @@
+// expect: fragment-nested at 8:5
+diagram sequence version=1 {
+  title "A loop inside an opt"
+  desc "A fragment is not drawn inside another."
+  actor a
+  actor b
+  opt "sometimes" {
+    loop "for each" {
+      call a b "ask"
+    }
+  }
+}

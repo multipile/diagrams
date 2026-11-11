@@ -1,0 +1,10 @@
+// expect: cell-taken at 8:5
+diagram process version=1 {
+  title "Two tasks in one cell"
+  desc "A cell holds one task."
+  column one "One"
+  lane team "Team" badge=TEA {
+    task a "First" column=one
+    task b "Second" column=one
+  }
+}

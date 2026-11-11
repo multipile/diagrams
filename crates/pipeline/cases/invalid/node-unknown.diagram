@@ -1,0 +1,6 @@
+// expect: node-unknown at 5:3
+diagram dependency version=1 {
+  title "A node a dependency diagram does not hold"
+  desc "bxo is near box."
+  bxo cli
+}

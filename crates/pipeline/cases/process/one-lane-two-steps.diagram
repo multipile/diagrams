@@ -1,0 +1,14 @@
+diagram process version=1 {
+  title "A process one team runs alone"
+  desc "The team drafts a plan and then carries it out, with nobody else involved."
+
+  column plan "Plan"
+  column act "Act" focal=#true
+
+  lane team "Team" badge=TEA {
+    task draft "Draft the plan" column=plan out=file
+    task carry "Carry it out" column=act in=file
+  }
+
+  line draft carry
+}

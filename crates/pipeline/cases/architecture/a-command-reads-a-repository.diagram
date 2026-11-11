@@ -1,0 +1,25 @@
+// The parts of the cli that read a repository, and what each asks of the next.
+diagram architecture version=1 {
+  title "How a command reads a repository"
+  desc "A command finds the piles through the piles crate, and both ask every question of the storage interface, which only the git backend answers with git."
+  note "No command runs git. Every read goes through the storage interface."
+  flow right
+
+  box cli pile="@cli" sub="a command"
+  box piles pile="@piles" sub="which piles there are"
+  box storage pile="@storage" sub="the Storage interface" focal=#true {
+    box git-backend "git backend"
+    box memory "memory backend" sub="in tests" as=optional
+  }
+  box git "git" as=external
+
+  tier cli
+  tier piles
+  tier storage
+  tier git zone="outside the binary"
+
+  line cli piles label="discover"
+  line piles storage label="declarations"
+  line cli storage label="every read"
+  line git-backend git
+}

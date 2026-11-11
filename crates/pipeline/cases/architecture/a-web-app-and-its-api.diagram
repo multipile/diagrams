@@ -1,0 +1,20 @@
+diagram architecture version=1 {
+  title "Who talks to the API"
+  desc "A web app and a mobile app call the API over HTTP, and the API keeps its data in an index and a blob store."
+  flow down
+
+  box cli "web app" as=input
+  box action "mobile app" sub="iOS and Android" as=input
+  box api "API" sub="REST" focal=#true
+  box index "index" sub="sqlite or postgres" as=store
+  box blobs "blob store" sub="files or S3" as=store
+
+  tier cli action zone="clients"
+  tier api zone="the service" trust=#true
+  tier index blobs
+
+  line cli api label="HTTP" kind=link
+  line action api label="HTTP" kind=link
+  line api index label="query"
+  line api blobs label="write" kind=async
+}

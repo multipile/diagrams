@@ -1,0 +1,28 @@
+diagram process version=1 {
+  title "How a diagram is added to a repository"
+  desc "The author writes the file, the pipeline reads and renders it, CI checks it again, and the author commits the file."
+  note "CI passing is what lets the author merge."
+
+  column write "Write"
+  column read "Read"
+  column render "Render" focal=#true
+  column check "Check"
+  column commit "Commit"
+
+  lane author "Author" badge=AUT {
+    task file "Write the file" column=write tool="editor" out=file
+    task merge "Merge it" column=commit tool="gh pr merge" in=file
+  }
+  lane pipeline "pipeline" badge=PIP {
+    task parse "Read the file" column=read tool="diagram check" in=file out=list
+    task png "Render it" column=render tool="diagram render" in=list out=file focal=#true
+  }
+  lane ci "CI" badge=CIX {
+    task again "Check every file" column=check tool="nix flake check" in=file
+  }
+
+  line file parse
+  line parse png
+  line png again
+  line again merge trigger=#true
+}

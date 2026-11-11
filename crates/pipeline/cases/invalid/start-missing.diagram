@@ -1,0 +1,8 @@
+// expect: start-missing at 6:3
+diagram state version=1 {
+  title "States with no start"
+  desc "A state diagram starts somewhere."
+  state a "A"
+  state b "B"
+  transition a b on="go"
+}

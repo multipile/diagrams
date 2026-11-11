@@ -1,0 +1,19 @@
+// This repository's own crates.
+diagram dependency version=1 {
+  title "How the diagram crates depend on one another"
+  desc "The pipeline depends on all three crates, render on html, and html on format; only render depends on takumi."
+  flow right
+
+  box pipeline "pipeline" sub="crates/pipeline"
+  box render "render" sub="crates/render"
+  box html "html" sub="crates/html" focal=#true
+  box format "format" sub="crates/format"
+  box takumi "takumi" as=external
+
+  line pipeline render
+  line pipeline html
+  line pipeline format
+  line render html
+  line render takumi
+  line html format
+}

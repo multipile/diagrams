@@ -1,0 +1,27 @@
+diagram sequence version=1 {
+  title "How a diagram file becomes a picture"
+  desc "The pipeline reads the file, refuses it when it breaks a rule, and otherwise builds its page and has takumi render it."
+  note "A file with findings renders nothing."
+
+  actor you "you" sub="a person or an agent" as=input
+  actor pipeline "pipeline" sub="diagram render"
+  actor format "format"
+  actor html "html"
+  actor render "render" sub="takumi"
+
+  call you pipeline "render"
+  call pipeline format "read"
+  alt {
+    case "has findings" {
+      reply format pipeline "findings"
+    }
+    case "else" {
+      reply format pipeline "diagram"
+      call pipeline html "build page"
+      reply html pipeline "html"
+      call pipeline render "render" focal=#true
+      reply render pipeline "png"
+    }
+  }
+  reply pipeline you "picture"
+}

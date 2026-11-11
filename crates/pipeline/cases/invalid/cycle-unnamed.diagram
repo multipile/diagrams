@@ -1,0 +1,11 @@
+// expect: cycle-unnamed at 10:3
+diagram dependency version=1 {
+  title "Lines that run in a circle"
+  desc "One of them has to be named as the cycle."
+  box a
+  box b
+  box c
+  line a b
+  line b c
+  line c a
+}
