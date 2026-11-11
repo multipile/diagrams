@@ -193,7 +193,12 @@ gallery=$work/gallery.md
 	echo "$start_marker"
 	echo "### Test diagrams"
 	echo
-	echo "Every case in \`crates/pipeline/cases/\`, rendered at ${HEAD_SHA:0:12}: $count pictures, $(wc -l <"$work/new") of them new on \`$assets\`, marked **new**."
+	fresh=$(wc -l <"$work/new")
+	if [ "$fresh" -gt 0 ]; then
+		echo "Every case in \`crates/pipeline/cases/\`, rendered at ${HEAD_SHA:0:12}: $count pictures, $fresh of them new on \`$assets\` in this run, marked **new**."
+	else
+		echo "Every case in \`crates/pipeline/cases/\`, rendered at ${HEAD_SHA:0:12}: $count pictures, none of them new on \`$assets\`."
+	fi
 	echo
 	cut -f1 "$manifest" | awk '!seen[$0]++' | while read -r group; do
 		total=$(awk -F'\t' -v g="$group" '$1 == g' "$manifest" | wc -l)
