@@ -95,6 +95,30 @@ impl Canvas {
         self.push(id, step, Shape::Line(line_shape(points, head, dashed, tone, label)));
     }
 
+    /// A line as [`Canvas::line`] draws it, its label kept off `boxes`, the
+    /// boxes it passes but does not meet.
+    #[allow(clippy::too_many_arguments)]
+    pub fn line_past(
+        &mut self,
+        id: impl Into<String>,
+        step: u32,
+        points: Vec<Point>,
+        kind: LineKind,
+        focal: bool,
+        label: Option<&str>,
+        boxes: &[Rect],
+    ) {
+        self.line(id, step, points, kind, focal, label);
+        if let Some(Element {
+            shape: Shape::Line(line),
+            ..
+        }) = self.elements.last_mut()
+            && let Some(label) = &mut line.label
+        {
+            label.at = geometry::label_point_clear(&line.points, geometry::label_width(&label.text), boxes);
+        }
+    }
+
     /// The scene: everything moved inside the margin, below the heading and
     /// above the note.
     pub fn finish(mut self, frame: &Frame) -> Scene {
