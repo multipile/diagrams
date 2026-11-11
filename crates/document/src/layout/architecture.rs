@@ -131,6 +131,7 @@ pub fn layout(body: &Architecture, canvas: &mut Canvas) {
                 format!("zone:{index}"),
                 2 * index as u32,
                 Shape::Region(RegionShape {
+                    pile: None,
                     rect,
                     kind: RegionKind::Zone,
                     label: Some(zone.label.clone()),

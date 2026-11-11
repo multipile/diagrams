@@ -44,6 +44,7 @@ pub fn layout(body: &Nested, canvas: &mut Canvas) {
             format!("level:{}", level.key),
             index as u32,
             Shape::Region(RegionShape {
+                pile: level.pile.as_ref().map(|pile| pile.reference.clone()),
                 rect,
                 kind: RegionKind::Level,
                 label: Some(name),

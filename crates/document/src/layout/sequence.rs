@@ -81,6 +81,7 @@ pub fn layout(body: &Sequence, canvas: &mut Canvas) {
             format!("lifeline:{}", actor.key),
             0,
             Shape::Region(RegionShape {
+                pile: None,
                 rect: Rect::new(centers[i], h, 0, bottom - h),
                 kind: RegionKind::Lifeline,
                 label: None,
@@ -98,6 +99,7 @@ pub fn layout(body: &Sequence, canvas: &mut Canvas) {
             format!("fragment:{n}"),
             step_of(frame.top),
             Shape::Region(RegionShape {
+                pile: None,
                 rect,
                 kind: RegionKind::Fragment,
                 label: Some(format!("{} [{}]", frame.kind, frame.guards[0])),
@@ -138,6 +140,7 @@ pub fn layout(body: &Sequence, canvas: &mut Canvas) {
             format!("activation:{}:{n}", body.actors[*actor].key),
             step_of(*y1),
             Shape::Region(RegionShape {
+                pile: None,
                 rect: Rect::new(centers[*actor] - BAR / 2, *y1 - 4, BAR, *y2 - *y1 + 8),
                 kind: RegionKind::Activation,
                 label: None,

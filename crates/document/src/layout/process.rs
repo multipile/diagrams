@@ -64,6 +64,7 @@ pub fn layout(body: &Process, canvas: &mut Canvas) {
             format!("column:{}", column.key),
             0,
             Shape::Region(RegionShape {
+                pile: None,
                 rect: Rect::new(x, 0, cell_w + GAP_COLUMN / 2, total_h),
                 kind: RegionKind::Column,
                 label: Some(format!("{:02} {}", index + 1, column.label)),
@@ -78,6 +79,7 @@ pub fn layout(body: &Process, canvas: &mut Canvas) {
             format!("lane:{}", lane.key),
             0,
             Shape::Region(RegionShape {
+                pile: None,
                 rect: Rect::new(0, HEADER_H + index as i32 * lane_h, total_w, lane_h),
                 kind: RegionKind::Lane,
                 label: Some(lane.name.clone()),

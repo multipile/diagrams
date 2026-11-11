@@ -54,6 +54,7 @@ pub fn layout(body: &Swimlane, canvas: &mut Canvas) {
             format!("lane:{}", lane.key),
             0,
             Shape::Region(RegionShape {
+                pile: None,
                 rect: Rect::new(0, index as i32 * lane_h, total_w, lane_h),
                 kind: RegionKind::Lane,
                 label: Some(lane.name.clone()),

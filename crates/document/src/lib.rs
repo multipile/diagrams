@@ -54,6 +54,42 @@ pub fn document(diagram: &Diagram, animation: Animation) -> Document {
     paint::document(&layout(diagram), animation)
 }
 
+/// A diagram's document with what a change touched marked: each box or
+/// level that stands for a pile `changed` says has changed is outlined and
+/// badged as a still diff marks a change, and listed under the diagram.
+/// `changed` is given each pile as the file names it: `@cli`, or `:/docs`.
+///
+/// This is how a review shows a diagram whose own file a pull request did
+/// not change, though it changed piles the diagram shows.
+pub fn changed_document(diagram: &Diagram, changed: impl Fn(&str) -> bool) -> Document {
+    use scene::{Element, Shape, Status};
+    let scene = layout(diagram);
+    let elements = scene
+        .elements
+        .iter()
+        .map(|element| {
+            let pile = match &element.shape {
+                Shape::Box(shape) => shape.pile.as_deref(),
+                Shape::Region(shape) => shape.pile.as_deref(),
+                _ => None,
+            };
+            let status = if pile.is_some_and(&changed) {
+                Status::Changed
+            } else {
+                Status::Same
+            };
+            diff::DiffElement {
+                element: Element {
+                    status,
+                    ..element.clone()
+                },
+                role: diff::Role::Kept,
+            }
+        })
+        .collect();
+    paint::diff_document(&Diff { scene, elements }, false)
+}
+
 /// Why two diagrams cannot be drawn as one diff.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DiffError {
