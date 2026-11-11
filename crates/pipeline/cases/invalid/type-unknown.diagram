@@ -1,0 +1,5 @@
+// expect: type-unknown at 2:9
+diagram dependancy version=1 {
+  title "A type spelled wrong"
+  desc "The reader names the type it is near."
+}

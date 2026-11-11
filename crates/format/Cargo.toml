@@ -1,0 +1,12 @@
+[package]
+name = "diagram-format"
+description = "Reads multipile's .diagram files, every version of every format, into one diagram"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+kdl.workspace = true

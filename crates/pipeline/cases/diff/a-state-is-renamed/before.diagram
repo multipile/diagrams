@@ -1,0 +1,15 @@
+diagram state version=1 {
+  title "An issue on a board"
+  desc "An issue starts in the backlog, moves to in progress, and is done when it is closed as completed or not planned."
+  flow right
+
+  state backlog "Backlog" start=#true
+  state progress "In progress" focal=#true
+  state done "Done" end=#true
+
+  transition backlog progress on="start"
+  transition progress progress on="commit"
+  transition progress backlog on="pause"
+  transition progress done on="close"
+  transition backlog done on="drop" guard="not planned"
+}

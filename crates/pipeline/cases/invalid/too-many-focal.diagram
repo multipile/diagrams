@@ -1,0 +1,10 @@
+// expect: too-many-focal at 8:3
+diagram architecture version=1 {
+  title "Three accents"
+  desc "An accent on three elements says nothing."
+  flow right
+  box a focal=#true
+  box b focal=#true
+  box c focal=#true
+  tier a b c
+}

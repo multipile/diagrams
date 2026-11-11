@@ -1,0 +1,6 @@
+// expect: property-unknown at 5:11
+diagram dependency version=1 {
+  title "A property a box does not take"
+  desc "colour is not a property of a box."
+  box cli colour="red"
+}

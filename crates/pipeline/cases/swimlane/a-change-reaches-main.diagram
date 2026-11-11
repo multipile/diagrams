@@ -1,0 +1,20 @@
+diagram swimlane version=1 {
+  title "How a change reaches main in a slot"
+  desc "The author branches and commits, CI checks each push, and the author merges once the pull request is green."
+  note "Nobody pushes to main: a merged pull request is the only way in."
+
+  lane author "Author" {
+    step branch "Branch" sub="git switch -c"
+    step commit "Commit"
+    step open "Open the PR"
+    step merge "Merge" sub="squash" focal=#true
+  }
+  lane ci "CI" {
+    step check "Check" sub="nix flake check"
+  }
+
+  line branch commit
+  line commit open
+  line open check label="push"
+  line check merge label="green"
+}

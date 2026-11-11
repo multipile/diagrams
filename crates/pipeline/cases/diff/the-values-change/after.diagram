@@ -1,0 +1,12 @@
+// diff: added=0 removed=0 changed=2
+diagram treemap version=1 {
+  title "Where the code of the diagrams is"
+  desc "The html crate holds most of the code, since every layout is in it; the format crate is next."
+  measure "lines of Rust"
+  source "wc -l of each crate, 2026-11-11"
+
+  part html "html" value=3100 short=HTM focal=#true
+  part format "format" value=1500 short=FMT
+  part pipeline "pipeline" value=600 short=PIP
+  part render "render" value=400 short=REN
+}

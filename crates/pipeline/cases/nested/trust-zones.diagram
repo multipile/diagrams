@@ -1,0 +1,10 @@
+diagram nested version=1 {
+  title "Where the server trusts what it is sent"
+  desc "The internet holds the server's edge, which holds the API, and only the API reaches storage."
+
+  level "the internet" {
+    level "the edge" sub="TLS" {
+      level "the API" sub="authenticated" focal=#true
+    }
+  }
+}

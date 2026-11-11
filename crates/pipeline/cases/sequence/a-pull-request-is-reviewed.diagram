@@ -1,0 +1,19 @@
+diagram sequence version=1 {
+  title "How the action reviews a pull request"
+  desc "GitHub runs the action on each push, the action asks pile for the change by pile and keeps a comment, and an agent reviews each pile."
+
+  actor github "GitHub" as=external
+  actor action "the action"
+  actor pile pile="@cli"
+  actor agent "review agent" as=external
+
+  notify github action "push"
+  call action pile "gitdiff"
+  reply pile action "markdown"
+  call action github "comment" link=#true
+  loop "for each pile" {
+    call agent pile "pile show"
+    reply pile agent "intent"
+  }
+  call agent github "review" link=#true focal=#true
+}

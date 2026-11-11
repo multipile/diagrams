@@ -1,0 +1,31 @@
+# One workspace for the crates that take a diagram from its file to a
+# picture, so they share one lock, one set of dependency versions and one
+# target/ to build into. Each crate still builds and tests on its own, with
+# `cargo test -p <crate>`.
+[workspace]
+resolver = "3"
+members = ["crates/format", "crates/document", "crates/html", "crates/render", "crates/pipeline"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+repository = "https://github.com/multipile/diagrams"
+publish = false
+
+[workspace.dependencies]
+diagram-format = { path = "crates/format" }
+diagram-document = { path = "crates/document" }
+diagram-html = { path = "crates/html" }
+diagram-render = { path = "crates/render" }
+kdl = "6.6"
+takumi = { version = "2.20", default-features = false, features = ["raster-backend", "woff2", "rayon"] }
+base64 = "0.22"
+png = "0.18"
+gif = "0.14"
+
+# Takumi draws every frame of an animation, and the end-to-end tests draw
+# many: build the dependencies optimised even in a test build.
+[profile.dev.package."*"]
+opt-level = 2

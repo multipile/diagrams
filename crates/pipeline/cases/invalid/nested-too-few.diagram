@@ -1,0 +1,8 @@
+// expect: under-limit at 6:5
+diagram nested version=1 {
+  title "Two levels"
+  desc "With two levels, a sentence says it."
+  level "outside" {
+    level "inside"
+  }
+}

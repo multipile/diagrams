@@ -1,0 +1,6 @@
+// expect: version-unknown at 2:14
+diagram tree version=9 {
+  title "A diagram from the future"
+  desc "A newer format than this reader knows."
+  item "root"
+}

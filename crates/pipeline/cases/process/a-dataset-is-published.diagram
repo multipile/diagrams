@@ -1,0 +1,21 @@
+diagram process version=1 {
+  title "How a benchmark publishes a dataset"
+  desc "A run produces raw results, the grader turns them into a table, and the report publishes it to the web."
+
+  column run "Run"
+  column grade "Grade"
+  column publish "Publish"
+
+  lane runner "Runner" badge=RUN {
+    task tasks "Run the tasks" column=run tool="harbor" out=dataset
+  }
+  lane grader "Grader" badge=GRD {
+    task score "Score each run" column=grade tool="grader" in=dataset out=table focal=#true
+  }
+  lane report "Report" badge=REP {
+    task page "Publish the page" column=publish tool="pages" in=table out=web
+  }
+
+  line tasks score
+  line score page
+}

@@ -1,0 +1,8 @@
+// expect: key-unknown at 7:3
+diagram dependency version=1 {
+  title "A line to a box that is not there"
+  desc "The line names stroage, and the box is storage."
+  box cli
+  box storage
+  line cli stroage
+}

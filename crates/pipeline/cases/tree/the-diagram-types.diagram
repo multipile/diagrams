@@ -1,0 +1,22 @@
+diagram tree version=1 {
+  title "The diagram types, by what they show"
+  desc "Nine types: three show structure, three show a flow over time, and three show parts of a whole."
+
+  item "diagram types" {
+    item "structure" {
+      item "architecture"
+      item "dependency"
+      item "tree"
+    }
+    item "flow" {
+      item "sequence"
+      item "swimlane"
+      item "process"
+    }
+    item "parts" {
+      item "nested"
+      item "treemap" focal=#true
+      item "state"
+    }
+  }
+}

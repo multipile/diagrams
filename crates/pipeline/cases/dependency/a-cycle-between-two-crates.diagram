@@ -1,0 +1,14 @@
+diagram dependency version=1 {
+  title "A cycle the build has to break"
+  desc "The api crate depends on the model, which depends on the store, which calls back into the api."
+
+  box app "app"
+  box api "api"
+  box model "model"
+  box store "store"
+
+  line app api
+  line api model
+  line model store
+  cycle store api
+}

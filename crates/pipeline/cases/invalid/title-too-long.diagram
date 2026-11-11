@@ -1,0 +1,6 @@
+// expect: too-long at 3:3
+diagram tree version=1 {
+  title "A title that goes on and on, far past the sixty characters a title may have"
+  desc "The title is drawn as a heading, and has to fit."
+  item "root"
+}

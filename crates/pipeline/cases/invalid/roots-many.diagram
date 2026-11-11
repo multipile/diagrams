@@ -1,0 +1,7 @@
+// expect: roots-many at 6:3
+diagram tree version=1 {
+  title "Two roots"
+  desc "A tree has one."
+  item "one"
+  item "two"
+}

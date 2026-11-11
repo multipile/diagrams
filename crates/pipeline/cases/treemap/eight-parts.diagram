@@ -1,0 +1,15 @@
+diagram treemap version=1 {
+  title "The size of each pile of the cli"
+  desc "Two piles hold half the code; the smallest four are each too small to name in their cell."
+  measure "files"
+  source "pile list, 2026-11-11"
+
+  part pile pile="@pile" value=120 short=PIL
+  part piles pile="@piles" value=90 short=PLS
+  part graph pile="@graph" value=60 short=GRA focal=#true
+  part storage pile="@storage" value=45 short=STO
+  part guide pile="@guide" value=30 short=GDE
+  part journeys pile="@journeys" value=8 short=JRN
+  part tap "tap formula" value=3 short=TAP
+  part other "other" value=2 short=OTH
+}

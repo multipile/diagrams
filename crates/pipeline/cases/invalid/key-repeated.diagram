@@ -1,0 +1,7 @@
+// expect: key-repeated at 6:3
+diagram dependency version=1 {
+  title "Two boxes with one key"
+  desc "A line could not say which it means."
+  box cli
+  box cli "the cli again"
+}

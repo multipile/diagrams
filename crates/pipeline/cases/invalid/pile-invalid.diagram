@@ -1,0 +1,6 @@
+// expect: pile-invalid at 5:11
+diagram dependency version=1 {
+  title "A pile named without its @"
+  desc "A pile is named as pile names one."
+  box cli pile="cli"
+}

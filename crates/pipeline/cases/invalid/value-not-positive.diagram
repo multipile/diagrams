@@ -1,0 +1,11 @@
+// expect: value-not-positive at 10:3
+diagram treemap version=1 {
+  title "A part with nothing in it"
+  desc "A part's value is more than zero."
+  measure "files"
+  source "a count"
+  part a value=10
+  part b value=5
+  part c value=3
+  part d value=0
+}

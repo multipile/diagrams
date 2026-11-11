@@ -1,0 +1,15 @@
+diagram tree version=1 {
+  title "What a pile's .pile directory holds"
+  desc "A .pile directory holds the pile's config and intent, and may hold declaration files and diagrams."
+  flow down
+
+  item ".pile/" sub=":/.pile" {
+    item "config" sub="kind, version, id, name"
+    item "intent.md" sub="why it is one thing"
+    item "diagrams/" {
+      item "crates.diagram" focal=#true
+      item "flow.diagram"
+    }
+    item "links.toml" sub="a declaration file" as=optional
+  }
+}

@@ -1,0 +1,16 @@
+diagram nested version=1 {
+  title "How far a change to a layout reaches"
+  desc "A change to one layout reaches its crate, the pipeline, this repository, the cli that takes it, and every page that shows a diagram."
+
+  level "pages showing diagrams" {
+    level "the cli" {
+      level "the diagrams" {
+        level "the pipeline" {
+          level "the document crate" {
+            level "one layout" focal=#true
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+diagram nested version=1 {
+  title "Which pile a file of the renderer is in"
+  desc "The repository holds the top pile, which holds the render pile, and the layouts directory is in the render pile."
+  note "A path is in the nearest pile at or above it, and in no other."
+
+  level "the git repository" {
+    level pile="@diagrams" sub=":/" {
+      level pile="@html" sub=":/crates/html" {
+        level "layout/" sub=":/crates/html/src/layout" focal=#true
+      }
+    }
+  }
+}

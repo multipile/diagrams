@@ -1,0 +1,19 @@
+diagram dependency version=1 {
+  title "How the cli crates depend on one another"
+  desc "The pile crate depends on every other crate, and the piles and graph crates both depend on storage."
+  note "A line points from a crate to a crate it depends on."
+
+  box pile pile="@pile" sub="crates/pile"
+  box piles pile="@piles" sub="crates/piles"
+  box graph pile="@graph" sub="crates/graph"
+  box guide pile="@guide" sub="crates/guide"
+  box storage pile="@storage" sub="crates/storage" focal=#true
+
+  line pile piles
+  line pile graph
+  line pile guide
+  line pile storage
+  line piles storage
+  line graph storage
+  line graph piles
+}

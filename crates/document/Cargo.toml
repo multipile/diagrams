@@ -1,0 +1,12 @@
+[package]
+name = "diagram-document"
+description = "Lays a diagram out and paints it into a complete document: every node placed and styled, every animation a track"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+diagram-format.workspace = true

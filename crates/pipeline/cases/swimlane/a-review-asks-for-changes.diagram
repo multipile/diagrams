@@ -1,0 +1,18 @@
+diagram swimlane version=1 {
+  title "A review that asks for changes"
+  desc "The author pushes, the reviewer reads the pull request by pile, and asks for changes until it is right."
+
+  lane author "Author" {
+    step push "Push"
+    step fix "Fix" focal=#true
+  }
+  lane reviewer "Reviewer" {
+    step read "Read by pile" sub="pile gitdiff"
+    step approve "Approve"
+  }
+
+  line push read
+  line read fix label="changes"
+  line fix read label="push again"
+  line read approve
+}
