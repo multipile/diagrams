@@ -16,7 +16,8 @@ usage:
 options:
   --fps <n>       frames a second of an animation (default 25)
   --scale <n>     pixels of a picture for each pixel of the page (default 2)
-  --at <ms>       a picture of the animation at that moment, not of its end";
+  --at <ms>       a picture of the animation at that moment, not of its end
+  --changed <piles>  mark the boxes of these piles changed, as the file names them: @cli,@storage";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -36,6 +37,8 @@ struct Flags {
     fps: u32,
     scale: f32,
     at: Option<u32>,
+    /// The piles to mark changed, as the file names them.
+    changed: Vec<String>,
 }
 
 fn flags(args: &[String]) -> Result<Flags, String> {
@@ -46,6 +49,7 @@ fn flags(args: &[String]) -> Result<Flags, String> {
         fps: 25,
         scale: 2.0,
         at: None,
+        changed: Vec::new(),
     };
     let mut args = args.iter();
     while let Some(arg) = args.next() {
@@ -54,6 +58,13 @@ fn flags(args: &[String]) -> Result<Flags, String> {
             "-o" | "--out" => flags.out = Some(value("-o")?),
             "--reveal" => flags.reveal = true,
             "--fps" => flags.fps = value("--fps")?.parse().map_err(|_| "--fps is a number".to_string())?,
+            "--changed" => {
+                flags.changed = value("--changed")?
+                    .split(',')
+                    .map(|pile| pile.trim().to_string())
+                    .filter(|pile| !pile.is_empty())
+                    .collect()
+            }
             "--at" => {
                 flags.at = Some(
                     value("--at")?
@@ -130,6 +141,25 @@ fn run(args: &[String]) -> Result<(), String> {
             };
             let out = flags.out.as_deref().ok_or(USAGE)?;
             let source = read(path)?;
+            if !flags.changed.is_empty() {
+                let changed: Vec<&str> = flags.changed.iter().map(String::as_str).collect();
+                let document =
+                    diagram_pipeline::changed_document(&source, &changed).map_err(|error| fail(path, error))?;
+                let bytes = match out_kind(out, false)? {
+                    Out::Html => {
+                        diagram_pipeline::html::page(&document, &diagram_pipeline::Options::default()).into_bytes()
+                    }
+                    Out::Still(format) => renderer
+                        .still(&document, format, None)
+                        .map_err(|error| fail(path, error.into()))?,
+                    Out::Motion(_) => {
+                        return Err(format!(
+                            "{out}: a diagram with its changed piles marked is still: write .html, .png or .webp"
+                        ));
+                    }
+                };
+                return std::fs::write(out, bytes).map_err(|error| format!("{out}: {error}"));
+            }
             let bytes = match out_kind(out, flags.reveal)? {
                 Out::Html => {
                     let animation = if flags.reveal {

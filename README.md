@@ -113,6 +113,8 @@ cargo test          # the same tests
 
 The end-to-end tests keep what they make in `target/tmp/e2e/`: each case's page, picture, reveal and diff, to look at.
 
+CI runs `nix flake check` on every pull request ([`check`](.github/workflows/check.yml)). A second workflow, [`test diagrams`](.github/workflows/test-diagrams.yml), renders every case as a picture and every pair as its diff, and shows them in the pull request's description, between `<!-- test-diagrams -->` and `<!-- /test-diagrams -->`, with each picture no run had stored before marked new. It stores each picture on the `assets/test-diagrams` branch, named by the SHA-256 of its bytes, so a picture is stored once. A pull request from a fork has a read-only token: its pictures are rendered, and not shown.
+
 ## Where the rules come from
 
 The diagram types, the rules every diagram is held to, and each type's limits are adapted from [Diagram Design](https://github.com/cathrynlavery/diagram-design), an agent skill by Cathryn Lavery: its catalogue of diagram types, each with when to use it, how it is laid out and how much it may hold, and its drawing rules (one idea per diagram, at most 9 boxes, 12 lines and 2 accents, lines at right angles on a 4px grid, labels of at most 14 characters). Its idea of a diff that keeps one layout for both versions, and matches elements by a stable id, shaped how this repository draws a change.

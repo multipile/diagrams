@@ -301,6 +301,9 @@ pub struct RegionShape {
     pub sub: Option<String>,
     pub dashed: bool,
     pub focal: bool,
+    /// The pile the region stands for, as the file named it: a nested
+    /// diagram's level.
+    pub pile: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

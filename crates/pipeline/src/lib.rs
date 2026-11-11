@@ -75,6 +75,15 @@ pub fn diff_document(before: &str, after: &str, animated: bool) -> Result<Docume
     )?)
 }
 
+/// A diagram file's document with the boxes of the piles in `changed`
+/// marked: each as the file names it, `@cli` or `:/docs`.
+pub fn changed_document(source: &str, changed: &[&str]) -> Result<Document, Error> {
+    let read = read(source)?;
+    Ok(diagram_document::changed_document(&read.diagram, |pile| {
+        changed.contains(&pile)
+    }))
+}
+
 /// A diagram file's page, still or revealed, with its fonts embedded.
 pub fn page(source: &str, animation: Animation) -> Result<String, Error> {
     Ok(diagram_html::page(&document(source, animation)?, &Options::default()))

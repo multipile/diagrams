@@ -178,3 +178,37 @@ fn every_type_can_be_diffed_against_a_changed_copy_of_itself() {
         assert!(gif_frames(&gif).len() > 5, "{}", case.name);
     }
 }
+
+#[test]
+fn a_diagram_marks_the_boxes_of_the_piles_a_change_touched() {
+    let renderer = renderer();
+    let case = cases("dependency")
+        .into_iter()
+        .find(|c| c.name.ends_with("the-cli-crates"))
+        .unwrap();
+    let document = diagram_pipeline::changed_document(&case.source, &["@storage", "@nothing"]).unwrap();
+    let html = diagram_html::page(&document, &diagram_pipeline::Options::default());
+    assert_eq!(
+        counted(&html, "changed"),
+        1,
+        "only the pile the diagram shows is marked"
+    );
+    assert_eq!(counted(&html, "added") + counted(&html, "removed"), 0);
+    assert!(html.contains("CHANGED: storage"), "it is listed under the diagram");
+    assert_eq!(document.duration_ms, 0, "it is still");
+    let png = renderer.still(&document, StillFormat::Png, None).unwrap();
+    keep("the-cli-crates-storage-changed", "png", &png);
+    let unmarked = diagram_pipeline::changed_document(&case.source, &[]).unwrap();
+    assert!(!diagram_html::page(&unmarked, &diagram_pipeline::Options::default()).contains("data-id=\"badge:"));
+}
+
+#[test]
+fn a_nested_level_that_is_a_pile_is_marked_too() {
+    let case = cases("nested")
+        .into_iter()
+        .find(|c| c.name.ends_with("which-pile-a-path-is-in"))
+        .unwrap();
+    let document = diagram_pipeline::changed_document(&case.source, &["@html"]).unwrap();
+    let html = diagram_html::page(&document, &diagram_pipeline::Options::default());
+    assert_eq!(counted(&html, "changed"), 1);
+}
