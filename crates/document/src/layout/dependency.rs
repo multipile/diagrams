@@ -102,7 +102,7 @@ pub fn layout(body: &Dependency, canvas: &mut Canvas) {
         let slot = channel.entry(after).or_default();
         let offset = 20 + (*slot % 5) * 8;
         *slot += 1;
-        let points = across(start, end, down, after + offset, before - offset, &others);
+        let points = across(start, end, down, after + offset, before - offset, &others, 0);
         let rank = ranks.get(&line.to).copied().unwrap_or(1) as u32;
         canvas.line(
             format!("line:{}->{}", line.from, line.to),

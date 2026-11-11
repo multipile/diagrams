@@ -5,7 +5,7 @@
 mod common;
 
 use common::*;
-use diagram_document::geometry::crossings;
+use diagram_document::geometry::{CLEARANCE, crossings, meetings};
 use diagram_document::scene::*;
 use diagram_pipeline::{Diagram, StillFormat, format::Body};
 
@@ -194,27 +194,148 @@ mod architecture {
         for case in cases("architecture") {
             let body = diagram_of(&case, |b| if let Body::Architecture(a) = b { Some(a) } else { None });
             let scene = laid_out(&case);
-            let holders: Vec<(String, Vec<String>)> = body
-                .boxes
-                .iter()
-                .map(|held| {
-                    (
-                        held.item.key.clone(),
-                        held.holds.iter().map(|i| i.key.clone()).collect(),
-                    )
-                })
-                .collect();
-            no_line_behind_a_box(&case, &scene, |id| {
-                let mut ends = line_ends(id);
-                // A line to a held box crosses its holder's edge to reach it.
-                for (holder, held) in &holders {
-                    if ends.iter().any(|end| held.contains(end)) {
-                        ends.push(holder.clone());
-                    }
-                }
-                ends
-            });
+            no_line_behind_a_box(&case, &scene, |id| ends_with_holders(&body, id));
         }
+    }
+
+    /// The boxes a line meets: its two ends, and the box holding either.
+    fn ends_with_holders(body: &diagram_pipeline::format::Architecture, id: &str) -> Vec<String> {
+        let mut ends = line_ends(id);
+        // A line to a held box crosses its holder's edge to reach it.
+        for held in &body.boxes {
+            if held.holds.iter().any(|inner| ends.contains(&inner.key)) {
+                ends.push(held.item.key.clone());
+            }
+        }
+        ends
+    }
+
+    /// The boxes of a scene that a line does not meet.
+    fn boxes_apart<'s>(
+        body: &diagram_pipeline::format::Architecture,
+        scene: &'s Scene,
+        id: &str,
+    ) -> Vec<(&'s str, Rect)> {
+        let own = ends_with_holders(body, id);
+        boxes(scene)
+            .into_iter()
+            .filter(|(box_id, _)| !own.iter().any(|end| box_id.ends_with(&format!(":{end}"))))
+            .collect()
+    }
+
+    #[test]
+    fn a_line_keeps_clear_of_every_box_it_does_not_meet() {
+        for case in cases("architecture") {
+            let body = diagram_of(&case, |b| if let Body::Architecture(a) = b { Some(a) } else { None });
+            let scene = laid_out(&case);
+            for (id, line) in lines(&scene) {
+                for (box_id, rect) in boxes_apart(&body, &scene, id) {
+                    assert_eq!(
+                        crossings(&line.points, &[rect.grow(CLEARANCE)]),
+                        0,
+                        "{}: {id} comes within {CLEARANCE}px of {box_id}",
+                        case.name
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_label_sits_on_its_line_and_beside_no_other_box() {
+        for case in cases("architecture") {
+            let body = diagram_of(&case, |b| if let Body::Architecture(a) = b { Some(a) } else { None });
+            let scene = laid_out(&case);
+            for (id, line) in lines(&scene) {
+                let Some(label) = &line.label else { continue };
+                let on = line.points.windows(2).any(|s| {
+                    let (x0, x1) = (s[0].x.min(s[1].x), s[0].x.max(s[1].x));
+                    let (y0, y1) = (s[0].y.min(s[1].y), s[0].y.max(s[1].y));
+                    (x0..=x1).contains(&label.at.x) && (y0..=y1).contains(&label.at.y)
+                });
+                assert!(on, "{}: the label of {id} is off its line", case.name);
+                let mask = label.rect();
+                for (box_id, rect) in boxes_apart(&body, &scene, id) {
+                    let near = rect.grow(CLEARANCE / 2);
+                    let apart = mask.right() <= near.x
+                        || near.right() <= mask.x
+                        || mask.bottom() <= near.y
+                        || near.bottom() <= mask.y;
+                    assert!(apart, "{}: the label of {id} is beside {box_id}", case.name);
+                }
+            }
+        }
+    }
+
+    /// Whether two routes have stretches on one line, running together or
+    /// one going on within `gap` of where the other stops.
+    fn lined_up(a: &[Point], b: &[Point], gap: i32) -> bool {
+        let span = |p: i32, q: i32| (p.min(q), p.max(q));
+        a.windows(2).any(|s| {
+            b.windows(2).any(|t| {
+                let (s_flat, t_flat) = (s[0].y == s[1].y, t[0].y == t[1].y);
+                if s_flat != t_flat {
+                    return false;
+                }
+                let (on, (s0, s1), (t0, t1)) = if s_flat {
+                    (s[0].y == t[0].y, span(s[0].x, s[1].x), span(t[0].x, t[1].x))
+                } else {
+                    (s[0].x == t[0].x, span(s[0].y, s[1].y), span(t[0].y, t[1].y))
+                };
+                on && s0.max(t0) - s1.min(t1) < gap
+            })
+        })
+    }
+
+    #[test]
+    fn no_line_runs_along_another_or_crosses_it_twice() {
+        for case in cases("architecture") {
+            let scene = laid_out(&case);
+            let all = lines(&scene);
+            for (k, (a, first)) in all.iter().enumerate() {
+                for (b, second) in &all[k + 1..] {
+                    assert!(
+                        !lined_up(&first.points, &second.points, 24),
+                        "{}: {a} and {b} run on one line",
+                        case.name
+                    );
+                    assert!(
+                        meetings(&first.points, &second.points) <= 1,
+                        "{}: {a} and {b} cross more than once",
+                        case.name
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn lines_through_one_channel_cross_only_where_their_ends_make_them() {
+        let case = cases("architecture")
+            .into_iter()
+            .find(|c| c.name.ends_with("a-line-shares-a-channel"))
+            .unwrap();
+        let scene = laid_out(&case);
+        let all = lines(&scene);
+        for (k, (a, first)) in all.iter().enumerate() {
+            for (b, second) in &all[k + 1..] {
+                // posts is above auth, and db above cache: a line from
+                // posts to cache and one from auth to db must cross once.
+                let forced = [*a, *b] == ["line:posts->cache", "line:auth->db"];
+                assert_eq!(
+                    meetings(&first.points, &second.points),
+                    usize::from(forced),
+                    "{}: {a} and {b}",
+                    case.name
+                );
+            }
+        }
+        // Each turns at its own place in the channel between the tiers.
+        let turn = |id: &str| {
+            let (_, line) = all.iter().find(|(other, _)| *other == id).unwrap();
+            line.points[1].x
+        };
+        assert_ne!(turn("line:posts->cache"), turn("line:auth->db"));
     }
 }
 

@@ -17,6 +17,8 @@ pub const BOX_H_SUB: i32 = 56;
 pub const FOOT_H: i32 = 16;
 /// How far a bend is rounded.
 pub const RADIUS: i32 = 8;
+/// The least room a line leaves between itself and a box it does not meet.
+pub const CLEARANCE: i32 = 12;
 
 /// `value`, rounded up to the grid.
 pub fn snap(value: i32) -> i32 {
@@ -98,6 +100,13 @@ impl Ports {
             .push((line, toward));
     }
 
+    /// The lines that meet `side` of the box `key`.
+    pub fn lines(&self, key: &str, side: Side) -> Vec<usize> {
+        self.ends
+            .get(&(key.to_string(), side))
+            .map_or_else(Vec::new, |ends| ends.iter().map(|(line, _)| *line).collect())
+    }
+
     /// The offset from the side's middle at which `line` meets it.
     pub fn offset(&self, key: &str, side: Side, line: usize, length: i32) -> i32 {
         let Some(ends) = self.ends.get(&(key.to_string(), side)) else {
@@ -144,12 +153,13 @@ pub fn elbow(start: Point, end: Point, vertical_first: bool, mid: i32) -> Vec<Po
 /// leaves, runs along a lane across the ranks between, turns again in the
 /// channel at `arrive` just before the rank it enters, and enters `end`
 /// along the flow. Of every lane beside a box, it takes the one that passes
-/// behind the fewest of `boxes`, and then the shortest.
-pub fn across(start: Point, end: Point, down: bool, leave: i32, arrive: i32, boxes: &[Rect]) -> Vec<Point> {
+/// behind the fewest of `boxes`, or comes within `clear` of the fewest, and
+/// then the shortest.
+pub fn across(start: Point, end: Point, down: bool, leave: i32, arrive: i32, boxes: &[Rect], clear: i32) -> Vec<Point> {
     if !down {
         let flip = |p: Point| Point::new(p.y, p.x);
         let flipped: Vec<Rect> = boxes.iter().map(|r| Rect::new(r.y, r.x, r.h, r.w)).collect();
-        return across(flip(start), flip(end), true, leave, arrive, &flipped)
+        return across(flip(start), flip(end), true, leave, arrive, &flipped, clear)
             .into_iter()
             .map(flip)
             .collect();
@@ -159,6 +169,7 @@ pub fn across(start: Point, end: Point, down: bool, leave: i32, arrive: i32, box
         lanes.push(rect.x - 16);
         lanes.push(rect.right() + 16);
     }
+    let near: Vec<Rect> = boxes.iter().map(|rect| rect.grow(clear)).collect();
     let mut candidates = vec![elbow(start, end, true, leave), elbow(start, end, true, arrive)];
     for lane in lanes {
         candidates.push(simplify(vec![
@@ -177,7 +188,7 @@ pub fn across(start: Point, end: Point, down: bool, leave: i32, arrive: i32, box
                 .windows(2)
                 .map(|s| (s[0].x - s[1].x).abs() + (s[0].y - s[1].y).abs())
                 .sum();
-            (crossings(route, boxes), route.len(), length)
+            (crossings(route, &near), route.len(), length)
         })
         .expect("there is always a route")
 }
@@ -215,6 +226,50 @@ pub fn crossings(points: &[Point], boxes: &[Rect]) -> usize {
         .sum()
 }
 
+/// How many times two routes meet: each point where a segment of one
+/// crosses or touches a segment of the other, and each stretch they run
+/// along together.
+pub fn meetings(a: &[Point], b: &[Point]) -> usize {
+    let span = |p: i32, q: i32| (p.min(q), p.max(q));
+    let mut points: Vec<(i32, i32)> = Vec::new();
+    let mut runs = 0;
+    for s in a.windows(2) {
+        for t in b.windows(2) {
+            let (s_flat, t_flat) = (s[0].y == s[1].y, t[0].y == t[1].y);
+            if s_flat == t_flat {
+                // Parallel: they meet only on one line.
+                let (on, (s0, s1), (t0, t1)) = if s_flat {
+                    (s[0].y == t[0].y, span(s[0].x, s[1].x), span(t[0].x, t[1].x))
+                } else {
+                    (s[0].x == t[0].x, span(s[0].y, s[1].y), span(t[0].y, t[1].y))
+                };
+                let (from, to) = (s0.max(t0), s1.min(t1));
+                if !on || from > to {
+                    continue;
+                }
+                if from < to {
+                    runs += 1;
+                } else if s_flat {
+                    points.push((from, s[0].y));
+                } else {
+                    points.push((s[0].x, from));
+                }
+            } else {
+                let (flat, upright) = if s_flat { (s, t) } else { (t, s) };
+                let (x0, x1) = span(flat[0].x, flat[1].x);
+                let (y0, y1) = span(upright[0].y, upright[1].y);
+                let (x, y) = (upright[0].x, flat[0].y);
+                if (x0..=x1).contains(&x) && (y0..=y1).contains(&y) {
+                    points.push((x, y));
+                }
+            }
+        }
+    }
+    points.sort_unstable();
+    points.dedup();
+    points.len() + runs
+}
+
 /// The point halfway along the longest segment of a route, for its label.
 pub fn label_point(points: &[Point]) -> Point {
     let segment = points
@@ -222,6 +277,60 @@ pub fn label_point(points: &[Point]) -> Point {
         .max_by_key(|segment| (segment[0].x - segment[1].x).abs() + (segment[0].y - segment[1].y).abs())
         .expect("a route has a segment");
     Point::new((segment[0].x + segment[1].x) / 2, (segment[0].y + segment[1].y) / 2)
+}
+
+/// The point for a label `width` wide on a route that passes `boxes`: the
+/// middle of the longest stretch along which the label's mask keeps half
+/// the [`CLEARANCE`] from every box, or [`label_point`] when there is none.
+pub fn label_point_clear(points: &[Point], width: i32, boxes: &[Rect]) -> Point {
+    let room = CLEARANCE / 2;
+    let mut best: Option<(i32, Point)> = None;
+    for segment in points.windows(2) {
+        let (a, b) = (segment[0], segment[1]);
+        let flat = a.y == b.y;
+        let (from, to) = if flat {
+            (a.x.min(b.x), a.x.max(b.x))
+        } else {
+            (a.y.min(b.y), a.y.max(b.y))
+        };
+        // The stretch of this segment each box keeps the label off.
+        let mut blocked: Vec<(i32, i32)> = boxes
+            .iter()
+            .filter_map(|rect| {
+                if flat {
+                    let beside = a.y - 8 < rect.bottom() + room && a.y + 8 > rect.y - room;
+                    beside.then_some((rect.x - room - width / 2, rect.right() + room + width / 2))
+                } else {
+                    let beside = a.x - width / 2 < rect.right() + room && a.x + width / 2 > rect.x - room;
+                    beside.then_some((rect.y - room - 8, rect.bottom() + room + 8))
+                }
+            })
+            .collect();
+        blocked.sort_unstable();
+        let mut at = from;
+        let mut free = Vec::new();
+        for (lo, hi) in blocked {
+            if lo > at {
+                free.push((at, lo.min(to)));
+            }
+            at = at.max(hi);
+        }
+        if at < to {
+            free.push((at, to));
+        }
+        for (lo, hi) in free {
+            let mid = (lo + hi) / 2;
+            let point = if flat {
+                Point::new(mid, a.y)
+            } else {
+                Point::new(a.x, mid)
+            };
+            if best.is_none_or(|(length, _)| hi - lo > length) {
+                best = Some((hi - lo, point));
+            }
+        }
+    }
+    best.map_or_else(|| label_point(points), |(_, point)| point)
 }
 
 /// An SVG path through `points`, each bend rounded by a quarter circle of
@@ -297,6 +406,16 @@ mod tests {
     fn a_bend_is_rounded_by_a_quarter_circle() {
         let d = path(&[Point::new(0, 0), Point::new(0, 40), Point::new(40, 40)], 0, 0);
         assert_eq!(d, "M 0 0 L 0 32 Q 0 40 8 40 L 40 40");
+    }
+
+    #[test]
+    fn two_routes_meet_where_they_cross_and_where_they_run_together() {
+        let p = |x, y| Point::new(x, y);
+        let z = [p(0, 0), p(20, 0), p(20, 40), p(60, 40)];
+        assert_eq!(meetings(&z, &[p(0, 20), p(60, 20)]), 1);
+        assert_eq!(meetings(&z, &[p(0, 60), p(60, 60)]), 0);
+        assert_eq!(meetings(&z, &[p(30, 40), p(80, 40)]), 1, "a shared stretch");
+        assert_eq!(meetings(&z, &[p(0, 10), p(40, 10), p(40, 60)]), 2);
     }
 
     #[test]

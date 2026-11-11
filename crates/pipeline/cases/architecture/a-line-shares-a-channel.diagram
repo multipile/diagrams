@@ -1,0 +1,22 @@
+// Two lines leave one tier for the next and cross the same channel.
+diagram architecture version=1 {
+  title "How the blog's parts talk to one another"
+  desc "The pages ask the posts service for posts and the auth service who an author is, and both keep their data in the database."
+  flow right
+
+  box ui "blog-ui" sub="what a reader sees"
+  box posts "posts" sub="serves the posts" focal=#true
+  box auth "auth" sub="proves who an author is"
+  box db "db" sub="Postgres" as=store
+  box cache "cache" sub="Redis" as=store
+
+  tier ui
+  tier posts auth
+  tier db cache
+
+  line ui posts label="posts"
+  line ui auth label="sign in"
+  line posts db label="read"
+  line posts cache label="hot posts"
+  line auth db label="sessions"
+}
