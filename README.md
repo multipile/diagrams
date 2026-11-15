@@ -2,6 +2,9 @@
 
 multipile's diagrams, from a file to a picture. A diagram is a `.diagram` file, written in [KDL](https://kdl.dev), that says what a diagram shows and never where. This repository reads it, paints it into one complete document, and writes that document as a self-contained HTML page with its CSS and its animation, or renders it to a still or an animated image with [takumi](https://github.com/kane50613/takumi), with no browser and nothing parsed.
 
+> [!NOTE]
+> **multipile is in early development.** Commands, file formats and output can still change between releases. Try it, and [tell us what you find](https://github.com/multipile/diagrams/issues).
+
 ```kdl
 diagram dependency version=1 {
   title "How the crates depend on one another"
