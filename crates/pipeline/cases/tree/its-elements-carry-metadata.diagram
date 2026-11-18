@@ -1,0 +1,13 @@
+diagram tree version=1 {
+  title "A site's pages, and the file behind each"
+  desc "The home page leads to the guide and the reference, and the guide to its two chapters."
+  flow down
+
+  item "home" site:file="index.md" site:listed=#true {
+    item "guide" site:file="guide/index.md" {
+      item "install" site:file="guide/install.md" site:order=1
+      item "first steps" site:file="guide/first-steps.md" site:order=2 focal=#true
+    }
+    item "reference" site:file="reference.md" site:listed=#false
+  }
+}

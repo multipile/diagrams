@@ -10,9 +10,9 @@ diagram dependency version=1 {
   title "How the crates depend on one another"
   desc "The cli crate depends on piles and storage. Piles depends on storage."
 
-  box cli pile="@cli" sub="crates/pile"
-  box piles pile="@piles" sub="crates/piles"
-  box storage pile="@storage" sub="crates/storage" focal=#true
+  box cli sub="crates/pile"
+  box piles sub="crates/piles"
+  box storage sub="crates/storage" focal=#true
 
   line cli piles
   line cli storage
@@ -29,7 +29,7 @@ diagram dependency version=1 {
 
 | Step | Crate | What it does |
 | --- | --- | --- |
-| Read | [`diagram-format`](crates/format) | Reads a `.diagram` file into a diagram, by the version of the format it says, and holds it to the rules every diagram and its type are held to. A file that breaks one is refused with every finding, each at its line and column, with what fixes it. |
+| Read | [`diagram-format`](crates/format) | Reads a `.diagram` file into a diagram, by the version of the format it says, and holds it to the rules every diagram and its type are held to. A file that breaks one is refused with every finding, each at its line and column, with what fixes it. It keeps the file's metadata as written, and never reads it. |
 | Document | [`diagram-document`](crates/document) | Lays the diagram out by its type's rules, and paints it into its complete document: every node placed and styled down to its colours, borders and fonts, lines drawn as boxes, and every animation (a reveal, or the diff of two versions) a track of keyframes. |
 | Page | [`diagram-html`](crates/html) | Writes the document as HTML that loads and runs nothing: a whole page, or one element to embed. Each node is a `<div>` with its style inline, and each track CSS keyframes. |
 | Picture | [`diagram-render`](crates/render) | Builds the document as takumi's nodes, property by property, and renders it to PNG or WebP, or frame by frame to an animated GIF, WebP or APNG. Takumi parses no HTML, SVG or CSS. |
@@ -44,10 +44,10 @@ A file holds one `diagram` node, which names its type and the version of the for
 Every diagram has a `title` (at most 60 characters), a `desc` (one sentence, for a screen reader) and may have a `note`, drawn under it. A box is written the same way in every type:
 
 ```kdl
-box <key> "<name>" pile="@cli" id="<the pile's id>" sub="<a second line>" as=plain focal=#true
+box <key> "<name>" sub="<a second line>" as=plain focal=#true
 ```
 
-`as` is `plain`, `store`, `external`, `input`, `optional` or `security`. At most two elements of a diagram are focal. A name is at most 24 characters, a second line 32, and a line's label 14.
+`as` is `plain`, `store`, `external`, `input`, `optional` or `security`. A box with no name shows its key. At most two elements of a diagram are focal. A name is at most 24 characters, a second line 32, and a line's label 14.
 
 | Type | Shows | Its own nodes | Limits |
 | --- | --- | --- | --- |
@@ -63,6 +63,37 @@ box <key> "<name>" pile="@cli" id="<the pile's id>" sub="<a second line>" as=pla
 
 [`crates/pipeline/cases/`](crates/pipeline/cases) holds several diagrams of every type, files that must be refused, and pairs to compare.
 
+### Metadata
+
+A diagram can carry what its host wants to say about it: which page documents a box, which team owns a service, what the diagram was drawn from. This is **metadata**. The diagrams keep it exactly as it is written and never read it. The host that owns it gives it its meaning, and checks it.
+
+```kdl
+box storage docs:page="storage.md" docs:reviewed=#true
+line cli storage docs:section=3
+
+meta docs {
+  index "crates.md" depth=2
+  owners {
+    team "storage" since="2026-01-12"
+  }
+}
+```
+
+- **On an element or a line**, metadata is a property named `<owner>:<key>`: two words of letters, digits, `_` and `-`, around one `:`. Its value is text, a number, `#true` or `#false`. Every element a type names takes it (a box, an actor, a state, a step, a task, a tree's item, a level, a part), and so does a `line` of an architecture, a swimlane or a dependency diagram, and a dependency's `cycle`.
+- **For the whole diagram**, metadata is a `meta <owner> { … }` node inside `diagram`, at most one for each owner. It holds any KDL: nodes with arguments, properties and children.
+
+The owner is the first word, so two hosts can write metadata in one file without reading each other's.
+
+Only what makes metadata unreadable is refused: `meta-invalid` for a name that is not two words around one `:`, a value that is `#null`, or a `meta` that does not name its one owner, and `meta-twice` for a second block of one owner. Nothing inside metadata is checked, so a file that reads here may still be refused by its host.
+
+A reader gets metadata with where it is written. For a string, it also gets where each of the string's lines starts in the file, so a host that keeps a small language in a string (in a raw string, `#"…"#`, or a multi-line one, `#"""…"""#`) can report a mistake at its line and column in the `.diagram` file.
+
+A page writes each property of an element or a line on that element's `<div>`, as `data-<owner>-<key>="<value>"`: `data-docs-page="storage.md"`. A `meta` node is not written to the page, and no metadata changes a picture. In a diff, an element whose metadata changed is marked as changed.
+
+### What version 1 still reads
+
+Version 1 was first written with two properties that named what a box stands for: `pile="@cli"`, or `pile=":/crates/cli"`, and `id="<32 hex characters>"` beside it. A file that has them still reads and draws as it did. They are read into the metadata `pile:ref` and `pile:id`, and a box with a `pile` and no name still shows that name. A new file writes metadata.
+
 ## Use it
 
 ### From the command line
@@ -76,6 +107,12 @@ nix run github:multipile/diagrams -- diff before.diagram after.diagram -o change
 ```
 
 `render` and `diff` take `--at <ms>` for one moment of an animation, `--fps` and `--scale`. In a clone, `cargo run -p diagram-pipeline --` runs the same command.
+
+`render --changed <keys>` draws a diagram with some of it marked as changed, the way a diff marks a change: an element by its key, and a line by the keys of its two ends.
+
+```sh
+nix run github:multipile/diagrams -- render my.diagram -o my.png --changed 'storage,cli->storage'
+```
 
 ### From Rust
 
@@ -95,6 +132,8 @@ let document = diagram_document::document(&read.diagram, diagram_document::Anima
 let page = diagram_html::page(&document, &diagram_html::Options::default());
 let gif = diagram_render::Renderer::new().animation(&document, diagram_render::MotionFormat::Gif, 25)?;
 ```
+
+A host reads a diagram's metadata from `read.diagram`: `meta` on each element and line, and `read.diagram.meta` for the blocks. `diagram_document::changed_document(&read.diagram, |mark| …)` gives the document with what the host says changed marked. It asks about each element by its key (`Mark::Element`) and each line by the keys of its two ends (`Mark::Line`).
 
 Reading, painting and writing pages adds about 0.8 MB to a release binary. Rendering pictures adds about 5 MB more, most of it takumi.
 

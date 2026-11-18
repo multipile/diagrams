@@ -12,19 +12,25 @@
 //! moves, and a diff's `data-added`, `data-removed` and `data-changed` what
 //! changed.
 //!
+//! The document's metadata is written with the node it is on: each property
+//! a file wrote as `<owner>:<key>` on an element or a line is the attribute
+//! `data-<owner>-<key>` of that element's or line's `<div>`, with its value
+//! as text. The page carries it for whoever reads the page, and nothing in
+//! the page reads it.
+//!
 //! ```
 //! let read = diagram_format::read(r#"
 //! diagram dependency version=1 {
 //!   title "How the crates depend on one another"
 //!   desc "The cli crate depends on storage."
-//!   box cli pile="@cli"
-//!   box storage pile="@storage"
+//!   box cli
+//!   box storage docs:page="storage.md"
 //!   line cli storage
 //! }
 //! "#).unwrap();
 //! let document = diagram_document::document(&read.diagram, diagram_document::Animation::None);
 //! let html = diagram_html::page(&document, &diagram_html::Options::default());
-//! assert!(html.contains("data-id=\"box:storage\""));
+//! assert!(html.contains("data-id=\"box:storage\" data-docs-page=\"storage.md\""));
 //! ```
 
 use std::fmt::Write as _;
@@ -217,8 +223,9 @@ fn write_node(out: &mut String, node: &Node, duration_ms: u32) {
     if let Some(id) = &node.id {
         let _ = write!(out, " data-id=\"{}\"", escape(id));
     }
-    if let Some(pile) = &node.pile {
-        let _ = write!(out, " data-pile=\"{}\"", escape(pile));
+    // Metadata's names are words of letters, digits, _ and -.
+    for (name, value) in &node.meta {
+        let _ = write!(out, " data-{name}=\"{}\"", escape(value));
     }
     // The style is an attribute's value: whatever it holds is escaped.
     let _ = write!(out, " style=\"{}\">", escape(style.trim_end()));

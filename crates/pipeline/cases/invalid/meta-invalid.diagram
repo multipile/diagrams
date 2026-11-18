@@ -1,0 +1,6 @@
+// expect: meta-invalid at 5:11
+diagram dependency version=1 {
+  title "Metadata named with two colons"
+  desc "Metadata is named by its owner and its key, two words around one colon."
+  box cli docs:page:anchor="cli.md"
+}

@@ -1,0 +1,9 @@
+// expect: property-unknown at 8:20
+diagram architecture version=1 {
+  title "Metadata where none is taken"
+  desc "A tier is not an element, and takes no metadata."
+  flow right
+  box cli
+  box storage
+  tier cli storage docs:page="tiers.md"
+}

@@ -17,7 +17,8 @@ options:
   --fps <n>       frames a second of an animation (default 25)
   --scale <n>     pixels of a picture for each pixel of the page (default 2)
   --at <ms>       a picture of the animation at that moment, not of its end
-  --changed <piles>  mark the boxes of these piles changed, as the file names them: @cli,@storage";
+  --changed <keys>   mark these elements changed, each by its key, and these lines,
+                     each by the keys of its two ends: storage,cli->storage";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -37,7 +38,7 @@ struct Flags {
     fps: u32,
     scale: f32,
     at: Option<u32>,
-    /// The piles to mark changed, as the file names them.
+    /// The elements to mark changed, by key, and the lines, as `<from>-><to>`.
     changed: Vec<String>,
 }
 
@@ -61,8 +62,8 @@ fn flags(args: &[String]) -> Result<Flags, String> {
             "--changed" => {
                 flags.changed = value("--changed")?
                     .split(',')
-                    .map(|pile| pile.trim().to_string())
-                    .filter(|pile| !pile.is_empty())
+                    .map(|key| key.trim().to_string())
+                    .filter(|key| !key.is_empty())
                     .collect()
             }
             "--at" => {
@@ -154,7 +155,7 @@ fn run(args: &[String]) -> Result<(), String> {
                         .map_err(|error| fail(path, error.into()))?,
                     Out::Motion(_) => {
                         return Err(format!(
-                            "{out}: a diagram with its changed piles marked is still: write .html, .png or .webp"
+                            "{out}: a diagram with what changed marked is still: write .html, .png or .webp"
                         ));
                     }
                 };

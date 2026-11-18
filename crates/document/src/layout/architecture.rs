@@ -142,7 +142,8 @@ pub fn layout(body: &Architecture, canvas: &mut Canvas) {
                 format!("zone:{index}"),
                 2 * index as u32,
                 Shape::Region(RegionShape {
-                    pile: None,
+                    key: None,
+                    meta: Vec::new(),
                     rect,
                     kind: RegionKind::Zone,
                     label: Some(zone.label.clone()),
@@ -381,9 +382,7 @@ pub fn layout(body: &Architecture, canvas: &mut Canvas) {
             format!("line:{}->{}", line.from, line.to),
             2 * tier as u32 + 1,
             simplify(route),
-            line.kind,
-            line.focal,
-            line.label.as_deref(),
+            line,
             others,
         );
     }

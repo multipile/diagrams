@@ -12,11 +12,15 @@ pub struct Span {
     pub len: usize,
 }
 
-/// One diagram: what every diagram has, and what its type has.
+/// One diagram: what every diagram has, what its type has, and the
+/// metadata it carries for whoever reads the diagram after this crate.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Diagram {
     pub frame: Frame,
     pub body: Body,
+    /// The metadata of the whole diagram, one block for each owner, in the
+    /// order they are written.
+    pub meta: Vec<MetaBlock>,
 }
 
 impl Diagram {
@@ -134,19 +138,94 @@ impl Look {
     }
 }
 
-/// A pile a box stands for: by its name, `@cli`, or by its `:/` path when it
-/// has none, and by its id when the file gives one.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Pile {
-    pub reference: String,
-    pub id: Option<String>,
+/// One piece of metadata on an element or a line: a property written
+/// `<owner>:<key>=<value>`. The diagram keeps it as it is written and never
+/// reads it: whoever owns the word before the `:` gives it its meaning.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Meta {
+    pub owner: String,
+    pub key: String,
+    pub value: MetaValue,
+    /// The whole property, from its owner to the end of its value.
+    pub span: Span,
 }
 
-impl Pile {
-    /// What a box shows for the pile: its name without the `@`, or its path.
-    pub fn shown(&self) -> &str {
-        self.reference.strip_prefix('@').unwrap_or(&self.reference)
+/// A value of metadata, as the file wrote it.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MetaValue {
+    Text(Text),
+    Integer(i128),
+    Float(f64),
+    Bool(bool),
+}
+
+impl MetaValue {
+    /// The text, when the value is text.
+    pub fn as_text(&self) -> Option<&Text> {
+        match self {
+            MetaValue::Text(text) => Some(text),
+            _ => None,
+        }
     }
+}
+
+/// A value as text: text as it is, a number in digits, a boolean as `true`
+/// or `false`.
+impl std::fmt::Display for MetaValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MetaValue::Text(text) => f.write_str(&text.text),
+            MetaValue::Integer(value) => write!(f, "{value}"),
+            MetaValue::Float(value) => write!(f, "{value}"),
+            MetaValue::Bool(value) => write!(f, "{value}"),
+        }
+    }
+}
+
+/// A string of metadata, with where each of its lines starts in the file,
+/// so that a place inside the string can be pointed at in the file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Text {
+    /// What the string says, with its quotes gone, its escapes resolved and
+    /// a multi-line string's indentation taken off.
+    pub text: String,
+    /// One byte offset into the file for each line of `text`, in order:
+    /// where that line's first character is written. In a raw string, and
+    /// in any string without an escape, a character `n` bytes into a line
+    /// of `text` is written `n` bytes after that line's start.
+    pub lines: Vec<usize>,
+}
+
+impl Text {
+    /// The byte offset into the file of the character `column` bytes into
+    /// line `line` of the text, both counted from 0. Exact for a raw string
+    /// and for any string without an escape.
+    pub fn offset(&self, line: usize, column: usize) -> Option<usize> {
+        self.lines.get(line).map(|start| start + column)
+    }
+}
+
+/// The metadata of a whole diagram that one owner wrote: `meta <owner> { … }`.
+/// It holds any nodes, which the diagram keeps as a tree and never reads.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MetaBlock {
+    pub owner: String,
+    pub nodes: Vec<MetaNode>,
+    /// The `meta` node.
+    pub span: Span,
+}
+
+/// One node inside a [`MetaBlock`], as it is written.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MetaNode {
+    pub name: String,
+    /// Its arguments in order, each with where it is written.
+    pub args: Vec<(MetaValue, Span)>,
+    /// Its properties in order: the key, the value, and where the property
+    /// is written.
+    pub props: Vec<(String, MetaValue, Span)>,
+    pub children: Vec<MetaNode>,
+    pub span: Span,
 }
 
 /// One thing a diagram shows: a box, an actor, a state, a step, a part.
@@ -158,9 +237,10 @@ pub struct Item {
     pub name: String,
     /// A second line, in monospace.
     pub sub: Option<String>,
-    pub pile: Option<Pile>,
     pub look: Look,
     pub focal: bool,
+    /// What the file says of it that the diagram does not read.
+    pub meta: Vec<Meta>,
     pub span: Span,
 }
 
@@ -201,6 +281,8 @@ pub struct Line {
     pub label: Option<String>,
     pub kind: LineKind,
     pub focal: bool,
+    /// What the file says of it that the diagram does not read.
+    pub meta: Vec<Meta>,
     pub span: Span,
 }
 

@@ -54,7 +54,8 @@ pub fn layout(body: &Swimlane, canvas: &mut Canvas) {
             format!("lane:{}", lane.key),
             0,
             Shape::Region(RegionShape {
-                pile: None,
+                key: None,
+                meta: Vec::new(),
                 rect: Rect::new(0, index as i32 * lane_h, total_w, lane_h),
                 kind: RegionKind::Lane,
                 label: Some(lane.name.clone()),
@@ -106,13 +107,11 @@ pub fn layout(body: &Swimlane, canvas: &mut Canvas) {
             _ => elbow(start, end, true, (start.y + end.y) / 2),
         };
         let column = columns[line.from.as_str()] as u32;
-        canvas.line(
+        canvas.written_line(
             format!("line:{}->{}", line.from, line.to),
             2 * column + 2,
             crate::geometry::simplify(points),
-            line.kind,
-            line.focal,
-            line.label.as_deref(),
+            line,
         );
     }
 

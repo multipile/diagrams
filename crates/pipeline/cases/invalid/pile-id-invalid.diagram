@@ -1,0 +1,6 @@
+// expect: pile-id-invalid at 5:23
+diagram dependency version=1 {
+  title "A pile's id that is too short"
+  desc "A file written with pile= may give the pile's id beside it, 32 hex characters."
+  box cli pile="@cli" id="3f9c"
+}

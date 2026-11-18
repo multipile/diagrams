@@ -1,0 +1,21 @@
+diagram process version=1 {
+  title "A report, and the schedule it runs on"
+  desc "The data team loads the sales, and the analysts write the report from them."
+
+  column load "Load"
+  column write "Write" focal=#true
+
+  lane data "Data" badge=DAT {
+    task sales "Load the sales" column=load out=dataset
+  }
+  lane analysts "Analysts" badge=ANA {
+    task report "Write the report" column=write in=dataset out=file
+  }
+
+  line sales report
+
+  meta schedule {
+    cron "0 6 * * 1" timezone="UTC"
+    retries 2
+  }
+}

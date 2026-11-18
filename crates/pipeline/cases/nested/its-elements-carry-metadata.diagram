@@ -1,0 +1,10 @@
+diagram nested version=1 {
+  title "Where a request is allowed, and by which rule"
+  desc "The network holds the cluster, which holds the namespace, and the service runs inside the namespace."
+
+  level "the network" policy:rule="allow-office" {
+    level "the cluster" sub="eu-west" policy:rule="mutual-tls" policy:audited=#true {
+      level "the namespace" sub="orders" policy:rule="orders-only" policy:rank=3 focal=#true
+    }
+  }
+}

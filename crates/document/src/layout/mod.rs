@@ -18,7 +18,7 @@ mod treemap;
 
 use std::collections::BTreeSet;
 
-use diagram_format::{Body, Diagram, Frame, Item, LineKind};
+use diagram_format::{Body, Diagram, Frame, Item, Line, LineKind};
 
 use crate::geometry::{self, MARGIN};
 use crate::scene::*;
@@ -95,20 +95,24 @@ impl Canvas {
         self.push(id, step, Shape::Line(line_shape(points, head, dashed, tone, label)));
     }
 
-    /// A line as [`Canvas::line`] draws it, its label kept off `boxes`, the
-    /// boxes it passes but does not meet.
-    #[allow(clippy::too_many_arguments)]
-    pub fn line_past(
-        &mut self,
-        id: impl Into<String>,
-        step: u32,
-        points: Vec<Point>,
-        kind: LineKind,
-        focal: bool,
-        label: Option<&str>,
-        boxes: &[Rect],
-    ) {
-        self.line(id, step, points, kind, focal, label);
+    /// A line the file wrote as a `line`, along `points`: drawn as it
+    /// says, and carrying the keys of its two ends and its metadata.
+    pub fn written_line(&mut self, id: impl Into<String>, step: u32, points: Vec<Point>, line: &Line) {
+        self.line(id, step, points, line.kind, line.focal, line.label.as_deref());
+        if let Some(Element {
+            shape: Shape::Line(shape),
+            ..
+        }) = self.elements.last_mut()
+        {
+            shape.ends = Some((line.from.clone(), line.to.clone()));
+            shape.meta = metadata(&line.meta);
+        }
+    }
+
+    /// A line as [`Canvas::written_line`] draws it, its label kept off
+    /// `boxes`, the boxes it passes but does not meet.
+    pub fn line_past(&mut self, id: impl Into<String>, step: u32, points: Vec<Point>, line: &Line, boxes: &[Rect]) {
+        self.written_line(id, step, points, line);
         if let Some(Element {
             shape: Shape::Line(line),
             ..
@@ -157,7 +161,8 @@ pub fn item_box(item: &Item, rect: Rect) -> BoxShape {
     shape.sub = item.sub.clone();
     shape.look = item.look;
     shape.focal = item.focal;
-    shape.pile = item.pile.as_ref().map(|pile| pile.reference.clone());
+    shape.key = Some(item.key.clone());
+    shape.meta = metadata(&item.meta);
     shape
 }
 
@@ -172,6 +177,8 @@ pub fn line_shape(points: Vec<Point>, head: Head, dashed: bool, tone: Tone, labe
         dashed,
         tone,
         label,
+        ends: None,
+        meta: Vec::new(),
     }
 }
 

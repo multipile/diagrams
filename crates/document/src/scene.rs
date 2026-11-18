@@ -150,19 +150,20 @@ impl Shape {
                 let said = shape.value.as_ref().or(shape.foot.as_ref());
                 format!(
                     "box|{}|{:?}|{:?}|{}|{:?}|{:?}|{:?}|{:?}",
-                    shape.name, shape.sub, shape.look, shape.focal, shape.corner, said, shape.tags, shape.pile
+                    shape.name, shape.sub, shape.look, shape.focal, shape.corner, said, shape.tags, shape.meta
                 )
             }
             Shape::Line(shape) => format!(
-                "line|{:?}|{}|{:?}|{:?}",
+                "line|{:?}|{}|{:?}|{:?}|{:?}",
                 shape.head,
                 shape.dashed,
                 shape.tone,
-                shape.label.as_ref().map(|label| &label.text)
+                shape.label.as_ref().map(|label| &label.text),
+                shape.meta
             ),
             Shape::Region(shape) => format!(
-                "region|{:?}|{}|{}|{:?}",
-                shape.label, shape.dashed, shape.focal, shape.kind
+                "region|{:?}|{}|{}|{:?}|{:?}",
+                shape.label, shape.dashed, shape.focal, shape.kind, shape.meta
             ),
             Shape::Text(shape) => format!("text|{}|{:?}", shape.text, shape.style),
             Shape::Dot(shape) => format!("dot|{}", shape.ring),
@@ -204,8 +205,11 @@ pub struct BoxShape {
     pub fill: Option<f32>,
     /// Text at the top left instead of the middle: a box that holds boxes.
     pub top: bool,
-    /// The pile the box stands for, as the file named it.
-    pub pile: Option<String>,
+    /// The key of the element the box draws, when the file names it by
+    /// one.
+    pub key: Option<String>,
+    /// The element's metadata, as [`metadata`] gives it.
+    pub meta: Vec<(String, String)>,
     /// What the file says the box is worth, when its foot is drawn from
     /// it: a treemap part's value, whose share of the whole is not what the
     /// file says, and changes when another part changes.
@@ -225,7 +229,8 @@ impl BoxShape {
             tags: Vec::new(),
             fill: None,
             top: false,
-            pile: None,
+            key: None,
+            meta: Vec::new(),
             value: None,
         }
     }
@@ -256,6 +261,20 @@ pub struct LineShape {
     pub dashed: bool,
     pub tone: Tone,
     pub label: Option<Label>,
+    /// The keys of the two elements it joins, from and to, when it draws a
+    /// line the file may give metadata: a `line`, or a `cycle`.
+    pub ends: Option<(String, String)>,
+    /// The line's metadata, as [`metadata`] gives it.
+    pub meta: Vec<(String, String)>,
+}
+
+/// An element's or a line's metadata as a scene carries it: each property
+/// as `<owner>-<key>` and its value as text, in the order the file wrote
+/// them. A scene carries metadata and never reads it.
+pub fn metadata(meta: &[diagram_format::Meta]) -> Vec<(String, String)> {
+    meta.iter()
+        .map(|meta| (format!("{}-{}", meta.owner, meta.key), meta.value.to_string()))
+        .collect()
 }
 
 /// A line's label, in capitals, on a mask of the paper colour.
@@ -301,9 +320,11 @@ pub struct RegionShape {
     pub sub: Option<String>,
     pub dashed: bool,
     pub focal: bool,
-    /// The pile the region stands for, as the file named it: a nested
-    /// diagram's level.
-    pub pile: Option<String>,
+    /// The key of the element the region draws, when the file names it
+    /// by one: a nested diagram's level.
+    pub key: Option<String>,
+    /// The element's metadata, as [`metadata`] gives it.
+    pub meta: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

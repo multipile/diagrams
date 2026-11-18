@@ -1,0 +1,19 @@
+diagram process version=1 {
+  title "A report, and the job behind each task"
+  desc "The data team loads the sales and builds the table, and the analysts write the report from it."
+
+  column load "Load"
+  column build "Build" focal=#true
+  column write "Write"
+
+  lane data "Data" badge=DAT {
+    task sales "Load the sales" column=load out=dataset job:name="load-sales" job:nightly=#true
+    task table "Build the table" column=build in=dataset out=table job:name="build-table" job:minutes=12.5
+  }
+  lane analysts "Analysts" badge=ANA {
+    task report "Write the report" column=write in=table out=file job:manual=#true
+  }
+
+  line sales table
+  line table report
+}

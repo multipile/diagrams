@@ -1,0 +1,25 @@
+diagram architecture version=1 {
+  title "A shop, and when it was last reviewed"
+  desc "The storefront calls the orders service, which keeps its orders in a database."
+  flow right
+
+  box storefront "storefront" as=input
+  box orders "orders" focal=#true
+  box database "database" as=store
+
+  tier storefront
+  tier orders
+  tier database
+
+  line storefront orders label="HTTP" kind=link
+  line orders database label="write"
+
+  meta review {
+    last "2026-03-02" by="the platform team"
+    every weeks=12
+    covers {
+      service "orders" critical=#true
+      service "storefront"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+diagram swimlane version=1 {
+  title "A refund, and the runbook it follows"
+  desc "Support opens the refund, finance pays it, and support tells the customer."
+
+  lane support "Support" {
+    step open "Open the refund"
+    step tell "Tell the customer"
+  }
+  lane finance "Finance" {
+    step pay "Pay" focal=#true
+  }
+
+  line open pay
+  line pay tell label="paid"
+
+  meta runbook {
+    page "refunds.md" revision=7
+    escalate "finance-lead" after-hours=72
+  }
+}

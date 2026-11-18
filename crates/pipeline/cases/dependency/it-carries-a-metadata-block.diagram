@@ -1,0 +1,32 @@
+diagram dependency version=1 {
+  title "Three crates, and what the diagram should show"
+  desc "The command depends on the reader, and both depend on the model."
+
+  box command
+  box reader
+  box model focal=#true
+
+  line command reader
+  line command model
+  line reader model
+
+  // What a host makes of this is the host's: the diagram keeps it as written.
+  meta checks {
+    boxes {
+      include #"?- depends(Crate, "model")."#
+      include #"near(C) :- depends(C, "reader")."# \
+              #"near(C) :- depends("reader", C)."# \
+              #"?- near(Crate)."#
+      ignore "bench" reason="built only for benchmarks"
+    }
+    lines {
+      include #"""
+        direct(A, B) :- depends(A, B), !through(A, B).
+        ?- direct(From, To).
+        """#
+    }
+  }
+  meta docs {
+    page "crates.md" section=2
+  }
+}

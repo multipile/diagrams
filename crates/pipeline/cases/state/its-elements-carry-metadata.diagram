@@ -1,0 +1,15 @@
+diagram state version=1 {
+  title "An order, and the table each state is kept in"
+  desc "An order is placed, then paid, then shipped, and can be cancelled until it ships."
+  flow right
+
+  state placed "Placed" start=#true db:table="orders" db:status=1
+  state paid "Paid" focal=#true db:table="orders" db:status=2
+  state shipped "Shipped" end=#true db:table="shipments" db:status=3
+  state cancelled "Cancelled" end=#true db:table="orders" db:status=9 db:kept=#false
+
+  transition placed paid on="pay"
+  transition paid shipped on="ship"
+  transition placed cancelled on="cancel"
+  transition paid cancelled on="cancel" action="refund"
+}
