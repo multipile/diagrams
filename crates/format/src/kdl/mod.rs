@@ -20,7 +20,7 @@ mod v1;
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 
 use crate::finding::{Report, did_you_mean};
-use crate::model::{Diagram, Kind, Span};
+use crate::model::{Diagram, Kind, Meta, MetaBlock, MetaNode, MetaValue, Span, Text};
 
 /// The versions of the KDL format this reader reads, oldest first.
 pub const VERSIONS: &[u32] = &[1];
@@ -194,6 +194,122 @@ pub(crate) struct Shape<'s> {
     pub args: (usize, usize),
     pub props: &'s [&'s str],
     pub children: bool,
+    /// Whether it takes metadata: properties written `<owner>:<key>`.
+    pub meta: bool,
+}
+
+const META_USAGE: &str = "metadata is written <owner>:<key>=<value>, each a word of letters, digits, _ and -";
+const META_VALUES: &str = "give it text, a number, #true or #false";
+
+/// A word: letters, digits, `_` and `-`, starting with a letter.
+fn word(text: &str) -> bool {
+    let mut chars = text.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// The owner and the key of a metadata property's name: two words around
+/// one `:`.
+fn meta_name(name: &str) -> Option<(&str, &str)> {
+    let (owner, key) = name.split_once(':')?;
+    (word(owner) && word(key)).then_some((owner, key))
+}
+
+/// An entry's value as metadata keeps it. Metadata holds no `#null`.
+fn meta_value(entry: &KdlEntry) -> Option<MetaValue> {
+    match entry.value() {
+        KdlValue::String(text) => Some(MetaValue::Text(located(entry, text))),
+        KdlValue::Integer(value) => Some(MetaValue::Integer(*value)),
+        KdlValue::Float(value) => Some(MetaValue::Float(*value)),
+        KdlValue::Bool(value) => Some(MetaValue::Bool(*value)),
+        KdlValue::Null => None,
+    }
+}
+
+/// A string with where each of its lines starts in the file.
+pub(crate) fn located(entry: &KdlEntry, text: &str) -> Text {
+    let span = entry_span(entry);
+    let count = text.split('\n').count();
+    // An entry ends with its value, as the file wrote it.
+    let written = entry.format().map(|format| format.value_repr.as_str());
+    let at = span.offset + span.len.saturating_sub(written.map_or(span.len, str::len));
+    let mut lines = written.map_or_else(Vec::new, |written| line_starts(written, at));
+    if lines.len() != count {
+        // Escapes in a multi-line string moved its lines: every line is
+        // said to start where the first does.
+        lines = vec![lines.first().copied().unwrap_or(at); count];
+    }
+    Text {
+        text: text.to_string(),
+        lines,
+    }
+}
+
+/// Where each line of a string's content starts, for a string written as
+/// `written` at the byte offset `at`: a bare word, a quoted string, a raw
+/// one (`#"…"#`), or a multi-line one (`"""`, raw or not), whose
+/// indentation is not content.
+fn line_starts(written: &str, at: usize) -> Vec<usize> {
+    let hashes = written.bytes().take_while(|byte| *byte == b'#').count();
+    let body = &written[hashes..];
+    if !body.starts_with('"') {
+        return vec![at];
+    }
+    if body.starts_with("\"\"\"") {
+        let mut rows = Vec::new();
+        let mut offset = at;
+        for row in written.split_inclusive('\n') {
+            rows.push((offset, row.trim_end_matches(['\n', '\r'])));
+            offset += row.len();
+        }
+        // The last row is the closing quotes, after the indentation every
+        // row above it starts with.
+        let Some(((_, last), content)) = rows.split_last() else {
+            return Vec::new();
+        };
+        let indent = last.find('"').unwrap_or(0);
+        return content
+            .iter()
+            .skip(1)
+            .map(|(offset, row)| {
+                if row.trim().is_empty() {
+                    offset + row.len()
+                } else {
+                    offset + indent.min(row.len())
+                }
+            })
+            .collect();
+    }
+    let start = at + hashes + 1;
+    let mut lines = vec![start];
+    if hashes == 0 {
+        // A quoted string on one line of the file has more lines when it
+        // escapes a newline.
+        let inner = &body[1..body.len().saturating_sub(1).max(1)];
+        let mut chars = inner.char_indices().peekable();
+        while let Some((_, c)) = chars.next() {
+            if c != '\\' {
+                continue;
+            }
+            match chars.next() {
+                Some((index, 'n')) => lines.push(start + index + 1),
+                Some((_, 'u')) => {
+                    for (_, c) in chars.by_ref() {
+                        if c == '}' {
+                            break;
+                        }
+                    }
+                }
+                Some((_, c)) if c.is_whitespace() => {
+                    while chars.peek().is_some_and(|(_, c)| c.is_whitespace()) {
+                        chars.next();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    lines
 }
 
 impl Reader<'_> {
@@ -224,7 +340,29 @@ impl Reader<'_> {
         for entry in node.entries() {
             let Some(prop) = entry.name() else { continue };
             let prop = prop.value();
-            if !shape.props.contains(&prop) {
+            if shape.meta && prop.contains(':') {
+                if meta_name(prop).is_none() {
+                    self.report.help(
+                        "meta-invalid",
+                        entry_span(entry),
+                        format!("{prop} is not the name of metadata"),
+                        META_USAGE,
+                    );
+                    fine = false;
+                } else if meta_value(entry).is_none() {
+                    self.report.help(
+                        "meta-invalid",
+                        entry_span(entry),
+                        format!("{prop} has no value"),
+                        META_VALUES,
+                    );
+                    fine = false;
+                } else if seen.contains(&prop) {
+                    self.report
+                        .add("property-repeated", entry_span(entry), format!("{prop} is given twice"));
+                    fine = false;
+                }
+            } else if !shape.props.contains(&prop) {
                 let help = did_you_mean(prop, shape.props.iter().copied()).unwrap_or_else(|| {
                     if shape.props.is_empty() {
                         format!("`{name}` takes no property")
@@ -256,6 +394,88 @@ impl Reader<'_> {
             fine = false;
         }
         fine
+    }
+
+    /// The metadata a node carries, in the order it is written. What
+    /// [`Reader::shape`] refuses is left out.
+    pub fn meta(node: &KdlNode) -> Vec<Meta> {
+        node.entries()
+            .iter()
+            .filter_map(|entry| {
+                let (owner, key) = meta_name(entry.name()?.value())?;
+                Some(Meta {
+                    owner: owner.to_string(),
+                    key: key.to_string(),
+                    value: meta_value(entry)?,
+                    span: entry_span(entry),
+                })
+            })
+            .collect()
+    }
+
+    /// `meta <owner> { … }`: the metadata of the whole diagram that one
+    /// owner wrote. Whatever it holds is kept, and none of it is read.
+    pub fn meta_block(&mut self, node: &KdlNode) -> Option<MetaBlock> {
+        let usage = "write it as: meta <owner> { … }, the owner a word of letters, digits, _ and -";
+        let entries = node.entries();
+        let owner = match entries {
+            [entry] if entry.name().is_none() => match entry.value() {
+                KdlValue::String(owner) if word(owner) => Some(owner.clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        if owner.is_none() {
+            let message = if entries.is_empty() {
+                "`meta` does not say whose metadata it holds".to_string()
+            } else {
+                "`meta` takes its owner, and nothing else".to_string()
+            };
+            self.report.help("meta-invalid", span(node), message, usage);
+        }
+        let nodes = self.meta_nodes(node);
+        Some(MetaBlock {
+            owner: owner?,
+            nodes: nodes?,
+            span: span(node),
+        })
+    }
+
+    fn meta_nodes(&mut self, node: &KdlNode) -> Option<Vec<MetaNode>> {
+        let mut nodes = Vec::new();
+        let mut fine = true;
+        for child in Self::children(node) {
+            let mut args = Vec::new();
+            let mut props = Vec::new();
+            for entry in child.entries() {
+                let Some(value) = meta_value(entry) else {
+                    self.report.help(
+                        "meta-invalid",
+                        entry_span(entry),
+                        "metadata holds no #null",
+                        META_VALUES,
+                    );
+                    fine = false;
+                    continue;
+                };
+                match entry.name() {
+                    Some(name) => props.push((name.value().to_string(), value, entry_span(entry))),
+                    None => args.push((value, entry_span(entry))),
+                }
+            }
+            let children = self.meta_nodes(child);
+            match children {
+                Some(children) => nodes.push(MetaNode {
+                    name: child.name().value().to_string(),
+                    args,
+                    props,
+                    children,
+                    span: span(child),
+                }),
+                None => fine = false,
+            }
+        }
+        fine.then_some(nodes)
     }
 
     pub fn args(node: &KdlNode) -> Vec<&KdlEntry> {

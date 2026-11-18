@@ -9,7 +9,7 @@
 
 use std::fmt;
 
-pub use diagram_document::{self as document, Animation, Document};
+pub use diagram_document::{self as document, Animation, Document, Mark};
 pub use diagram_format::{self as format, Diagram, Findings, Read};
 pub use diagram_html::{self as html, Options};
 pub use diagram_render::{self as render, MotionFormat, Renderer, StillFormat};
@@ -75,12 +75,14 @@ pub fn diff_document(before: &str, after: &str, animated: bool) -> Result<Docume
     )?)
 }
 
-/// A diagram file's document with the boxes of the piles in `changed`
-/// marked: each as the file names it, `@cli` or `:/docs`.
+/// A diagram file's document with the elements and the lines in `changed`
+/// marked: an element by its key, `storage`, and a line by the keys of its
+/// two ends, `cli->storage`.
 pub fn changed_document(source: &str, changed: &[&str]) -> Result<Document, Error> {
     let read = read(source)?;
-    Ok(diagram_document::changed_document(&read.diagram, |pile| {
-        changed.contains(&pile)
+    Ok(diagram_document::changed_document(&read.diagram, |mark| match mark {
+        Mark::Element(key) => changed.contains(&key),
+        Mark::Line { from, to } => changed.contains(&format!("{from}->{to}").as_str()),
     }))
 }
 

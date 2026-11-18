@@ -12,8 +12,8 @@
 //! diagram dependency version=1 {
 //!   title "How the crates depend on one another"
 //!   desc "The cli crate depends on storage."
-//!   box cli pile="@cli"
-//!   box storage pile="@storage"
+//!   box cli
+//!   box storage
 //!   line cli storage
 //! }
 //! "#).unwrap();
@@ -54,26 +54,42 @@ pub fn document(diagram: &Diagram, animation: Animation) -> Document {
     paint::document(&layout(diagram), animation)
 }
 
-/// A diagram's document with what a change touched marked: each box or
-/// level that stands for a pile `changed` says has changed is outlined and
-/// badged as a still diff marks a change, and listed under the diagram.
-/// `changed` is given each pile as the file names it: `@cli`, or `:/docs`.
+/// What [`changed_document`] asks about: one element or one line of a
+/// diagram, named by the keys the file gives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mark<'a> {
+    /// An element the file names by a key: a box, an actor, a state, a
+    /// step, a task, a part. A tree's item is named by the names on its
+    /// path from the root, joined by ` / `, and a nested diagram's level by
+    /// `level-1` for the outermost, `level-2` for the next.
+    Element(&'a str),
+    /// A `line` or a `cycle`, by the keys of the two elements it joins.
+    Line { from: &'a str, to: &'a str },
+}
+
+/// A diagram's document with what a change touched marked: each element
+/// and each line `changed` says has changed is outlined and badged as a
+/// still diff marks a change, and listed under the diagram. `changed` is
+/// asked about every element the file names by a key, and about every
+/// `line` and `cycle`. What makes one changed is its caller's to say: the
+/// diagram knows only its keys.
 ///
-/// This is how a review shows a diagram whose own file a pull request did
-/// not change, though it changed piles the diagram shows.
-pub fn changed_document(diagram: &Diagram, changed: impl Fn(&str) -> bool) -> Document {
+/// This is how a review shows a diagram whose own file a change did not
+/// touch, though it touched what the diagram shows.
+pub fn changed_document(diagram: &Diagram, changed: impl Fn(Mark) -> bool) -> Document {
     use scene::{Element, Shape, Status};
     let scene = layout(diagram);
     let elements = scene
         .elements
         .iter()
         .map(|element| {
-            let pile = match &element.shape {
-                Shape::Box(shape) => shape.pile.as_deref(),
-                Shape::Region(shape) => shape.pile.as_deref(),
+            let mark = match &element.shape {
+                Shape::Box(shape) => shape.key.as_deref().map(Mark::Element),
+                Shape::Region(shape) => shape.key.as_deref().map(Mark::Element),
+                Shape::Line(shape) => shape.ends.as_ref().map(|(from, to)| Mark::Line { from, to }),
                 _ => None,
             };
-            let status = if pile.is_some_and(&changed) {
+            let status = if mark.is_some_and(&changed) {
                 Status::Changed
             } else {
                 Status::Same

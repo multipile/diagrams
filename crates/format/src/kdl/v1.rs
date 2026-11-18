@@ -4,20 +4,37 @@
 //! is written:
 //!
 //! ```kdl
-//! box <key> "<name>" pile="@cli" id="<id>" sub="<second line>" as=store focal=#true
+//! box <key> "<name>" sub="<second line>" as=store focal=#true
 //! ```
 //!
-//! The name may be left out: a box that stands for a pile shows the pile's
-//! name, and any other box shows its key. Each type adds its own nodes, as
-//! the functions below say.
+//! The name may be left out, and the box then shows its key. Each type adds
+//! its own nodes, as the functions below say.
+//!
+//! A diagram carries metadata, which this reader keeps and never reads. A
+//! property written `<owner>:<key>=<value>` is metadata of the element or
+//! the line it is on, and `meta <owner> { … }` holds the metadata of the
+//! whole diagram, as any nodes:
+//!
+//! ```kdl
+//! box cli docs:page="cli.md" docs:reviewed=#true
+//! line cli storage docs:section=3
+//! meta docs {
+//!   index "crates.md" depth=2
+//! }
+//! ```
+//!
+//! Version 1 was first written with two properties that named a pile:
+//! `pile="@cli"`, or `pile=":/crates/cli"`, and `id="<the pile's id>"`
+//! beside it. They still read, into the metadata `pile:ref` and `pile:id`,
+//! and a box with a `pile` and no name shows the pile's name.
 
 use kdl::KdlNode;
 
-use super::{Reader, Shape, entry_span, span};
+use super::{Reader, Shape, entry_span, located, span};
 use crate::finding::Report;
 use crate::model::*;
 
-const FRAME: [&str; 3] = ["title", "desc", "note"];
+const FRAME: [&str; 4] = ["title", "desc", "note", "meta"];
 const ITEM_PROPS: [&str; 5] = ["pile", "id", "sub", "as", "focal"];
 
 pub(super) fn read(node: &KdlNode, kind: Kind, report: &mut Report) -> Option<Diagram> {
@@ -29,6 +46,7 @@ pub(super) fn read(node: &KdlNode, kind: Kind, report: &mut Report) -> Option<Di
             args: (1, 1),
             props: &["version"],
             children: true,
+            meta: false,
         },
     );
     let mut frame = FrameParts::default();
@@ -44,10 +62,12 @@ pub(super) fn read(node: &KdlNode, kind: Kind, report: &mut Report) -> Option<Di
         Kind::Nested => nested(&mut r, children, &mut frame).map(Body::Nested),
         Kind::Treemap => treemap(&mut r, children, &mut frame).map(Body::Treemap),
     };
+    let meta = std::mem::take(&mut frame.meta);
     let frame = frame.finish(&mut r, node);
     Some(Diagram {
         frame: frame?,
         body: body?,
+        meta,
     })
 }
 
@@ -56,6 +76,7 @@ struct FrameParts {
     title: Option<(String, Span)>,
     desc: Option<String>,
     note: Option<String>,
+    meta: Vec<MetaBlock>,
 }
 
 impl FrameParts {
@@ -64,6 +85,21 @@ impl FrameParts {
         let name = node.name().value();
         let slot = match name {
             "title" | "desc" | "note" => name,
+            "meta" => {
+                if let Some(block) = r.meta_block(node) {
+                    if self.meta.iter().any(|other| other.owner == block.owner) {
+                        r.report.help(
+                            "meta-twice",
+                            span(node),
+                            format!("the diagram has two `meta {}`", block.owner),
+                            "put what both hold in one",
+                        );
+                    } else {
+                        self.meta.push(block);
+                    }
+                }
+                return true;
+            }
             _ => return false,
         };
         let usage = format!("{slot} \"<text>\"");
@@ -74,6 +110,7 @@ impl FrameParts {
                 args: (1, 1),
                 props: &[],
                 children: false,
+                meta: false,
             },
         ) {
             return true;
@@ -144,6 +181,7 @@ fn item(r: &mut Reader, node: &KdlNode, spec: &ItemSpec) -> Option<Item> {
             args: (first, first + 1),
             props: &props,
             children: spec.children,
+            meta: true,
         },
     );
     let key = if spec.keyed {
@@ -157,6 +195,24 @@ fn item(r: &mut Reader, node: &KdlNode, spec: &ItemSpec) -> Option<Item> {
         None
     };
     let pile = pile(r, node);
+    let mut meta = pile.clone().unwrap_or_default();
+    let read = meta.len();
+    for written in Reader::meta(node) {
+        if meta[..read]
+            .iter()
+            .any(|old| (&old.owner, &old.key) == (&written.owner, &written.key))
+        {
+            // `pile=` and `id=` are read as `pile:ref` and `pile:id`.
+            r.report.help(
+                "property-repeated",
+                written.span,
+                format!("{}:{} is given twice", written.owner, written.key),
+                "leave out pile= and id=, which version 1 reads as pile:ref and pile:id",
+            );
+            return None;
+        }
+        meta.push(written);
+    }
     let sub = r.text_prop(node, "sub");
     let look = r
         .word_prop(node, "as", &Look::WORDS)
@@ -166,13 +222,18 @@ fn item(r: &mut Reader, node: &KdlNode, spec: &ItemSpec) -> Option<Item> {
     let key = key?;
     let name = match (name, &pile) {
         (Some(name), _) => name,
-        (None, Some(pile)) => pile.shown().to_string(),
+        // An old file's pile, shown by its name without the `@`, or by
+        // its path.
+        (None, Some(pile)) => match &pile[0].value {
+            MetaValue::Text(reference) => reference.text.strip_prefix('@').unwrap_or(&reference.text).to_string(),
+            _ => unreachable!("a pile is read as text"),
+        },
         (None, None) if spec.keyed => key.clone(),
         (None, None) => {
             r.report.help(
                 "name-missing",
                 span(node),
-                format!("`{}` has neither a name nor a pile", node.name().value()),
+                format!("`{}` has no name", node.name().value()),
                 format!("write it as: {}", spec.usage),
             );
             return None;
@@ -185,14 +246,18 @@ fn item(r: &mut Reader, node: &KdlNode, spec: &ItemSpec) -> Option<Item> {
         key,
         name,
         sub,
-        pile,
         look,
         focal,
+        meta,
         span: span(node),
     })
 }
 
-fn pile(r: &mut Reader, node: &KdlNode) -> Option<Pile> {
+/// The two properties version 1 was first written with, `pile="@cli"` and
+/// `id="<the pile's id>"` beside it, as the metadata they are read into:
+/// `pile:ref`, then `pile:id` when the file gives one. An `id` with no
+/// `pile` was never read.
+fn pile(r: &mut Reader, node: &KdlNode) -> Option<Vec<Meta>> {
     let entry = Reader::prop_entry(node, "pile")?;
     let reference = r.text(entry, "pile")?;
     if !(reference.starts_with('@') && reference.len() > 1 || reference.starts_with(":/")) {
@@ -204,23 +269,31 @@ fn pile(r: &mut Reader, node: &KdlNode) -> Option<Pile> {
         );
         return None;
     }
-    let id = match Reader::prop_entry(node, "id") {
-        Some(entry) => {
-            let id = r.text(entry, "id")?;
-            if id.len() != 32 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
-                r.report.help(
-                    "pile-id-invalid",
-                    entry_span(entry),
-                    format!("{id:?} is not a pile's id"),
-                    "a pile's id is 32 hex characters, as `pile list --full` prints it",
-                );
-                return None;
-            }
-            Some(id)
+    let mut meta = vec![Meta {
+        owner: "pile".to_string(),
+        key: "ref".to_string(),
+        value: MetaValue::Text(located(entry, &reference)),
+        span: entry_span(entry),
+    }];
+    if let Some(entry) = Reader::prop_entry(node, "id") {
+        let id = r.text(entry, "id")?;
+        if id.len() != 32 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
+            r.report.help(
+                "pile-id-invalid",
+                entry_span(entry),
+                format!("{id:?} is not a pile's id"),
+                "a pile's id is 32 hex characters, as `pile list --full` prints it",
+            );
+            return None;
         }
-        None => None,
-    };
-    Some(Pile { reference, id })
+        meta.push(Meta {
+            owner: "pile".to_string(),
+            key: "id".to_string(),
+            value: MetaValue::Text(located(entry, &id)),
+            span: entry_span(entry),
+        });
+    }
+    Some(meta)
 }
 
 fn flow(r: &mut Reader, node: &KdlNode) -> Option<Flow> {
@@ -231,6 +304,7 @@ fn flow(r: &mut Reader, node: &KdlNode) -> Option<Flow> {
             args: (1, 1),
             props: &[],
             children: false,
+            meta: false,
         },
     ) {
         return None;
@@ -252,8 +326,9 @@ fn flow(r: &mut Reader, node: &KdlNode) -> Option<Flow> {
     }
 }
 
-/// Two keys, and the properties `props` allows.
-fn ends(r: &mut Reader, node: &KdlNode, usage: &str, props: &[&str]) -> Option<(String, String)> {
+/// Two keys, and the properties `props` allows, with metadata when `meta`
+/// says the node takes it.
+fn ends(r: &mut Reader, node: &KdlNode, usage: &str, props: &[&str], meta: bool) -> Option<(String, String)> {
     let fine = r.shape(
         node,
         &Shape {
@@ -261,6 +336,7 @@ fn ends(r: &mut Reader, node: &KdlNode, usage: &str, props: &[&str]) -> Option<(
             args: (2, 2),
             props,
             children: false,
+            meta,
         },
     );
     let from = r.key_arg(node, 0);
@@ -273,7 +349,7 @@ fn ends(r: &mut Reader, node: &KdlNode, usage: &str, props: &[&str]) -> Option<(
 
 fn line(r: &mut Reader, node: &KdlNode) -> Option<Line> {
     let usage = "line <from> <to> label=\"<label>\" kind=call focal=#true";
-    let ends = ends(r, node, usage, &["label", "kind", "focal"]);
+    let ends = ends(r, node, usage, &["label", "kind", "focal"], true);
     let label = r.text_prop(node, "label");
     let kind = r
         .word_prop(node, "kind", &LineKind::WORDS)
@@ -287,20 +363,22 @@ fn line(r: &mut Reader, node: &KdlNode) -> Option<Line> {
         label,
         kind,
         focal,
+        meta: Reader::meta(node),
         span: span(node),
     })
 }
 
-/// A dependency line: two keys and nothing else.
+/// A dependency line: two keys, and nothing else but metadata.
 fn bare_line(r: &mut Reader, node: &KdlNode, word: &str) -> Option<Line> {
     let usage = format!("{word} <from> <to>");
-    let (from, to) = ends(r, node, &usage, &[])?;
+    let (from, to) = ends(r, node, &usage, &[], true)?;
     Some(Line {
         from,
         to,
         label: None,
         kind: LineKind::Call,
         focal: false,
+        meta: Reader::meta(node),
         span: span(node),
     })
 }
@@ -322,8 +400,8 @@ fn known(words: &[&'static str]) -> Vec<&'static str> {
 /// ```kdl
 /// diagram dependency version=1 {
 ///   flow down
-///   box cli pile="@cli"
-///   box storage pile="@storage" focal=#true
+///   box cli
+///   box storage focal=#true
 ///   line cli storage
 ///   cycle storage cli
 /// }
@@ -375,13 +453,13 @@ const BOX: ItemSpec = ItemSpec {
     keyed: true,
     extra: &[],
     children: false,
-    usage: "box <key> \"<name>\" pile=\"@pile\" sub=\"<second line>\" as=plain focal=#true",
+    usage: "box <key> \"<name>\" sub=\"<second line>\" as=plain focal=#true",
 };
 
 /// ```kdl
 /// diagram architecture version=1 {
 ///   flow right
-///   box storage pile="@storage" {
+///   box storage {
 ///     box git "git backend"
 ///   }
 ///   tier cli piles
@@ -434,6 +512,7 @@ fn architecture(r: &mut Reader, children: &[KdlNode], frame: &mut FrameParts) ->
                     args: (1, usize::MAX),
                     props: &["zone", "trust"],
                     children: false,
+                    meta: false,
                 },
             );
             let mut keys = Vec::new();
@@ -485,7 +564,7 @@ fn architecture(r: &mut Reader, children: &[KdlNode], frame: &mut FrameParts) ->
 /// ```kdl
 /// diagram sequence version=1 {
 ///   actor you "you" as=input
-///   actor cli pile="@cli"
+///   actor cli
 ///   call you cli "render"
 ///   alt {
 ///     case "has findings" { reply cli you "findings" }
@@ -499,7 +578,7 @@ fn sequence(r: &mut Reader, children: &[KdlNode], frame: &mut FrameParts) -> Opt
     let mut messages = Vec::new();
     let mut ok = true;
     let actor = ItemSpec {
-        usage: "actor <key> \"<name>\" pile=\"@pile\" sub=\"<second line>\" as=plain",
+        usage: "actor <key> \"<name>\" sub=\"<second line>\" as=plain",
         ..BOX
     };
     each(r, children, frame, |r, node| match node.name().value() {
@@ -527,6 +606,7 @@ fn message(r: &mut Reader, node: &KdlNode, words: &[&str]) -> Option<Message> {
                 args: (3, 3),
                 props,
                 children: false,
+                meta: false,
             },
         );
         let from = r.key_arg(node, 0);
@@ -574,6 +654,7 @@ fn message(r: &mut Reader, node: &KdlNode, words: &[&str]) -> Option<Message> {
                     args: (2, 2),
                     props: &["focal"],
                     children: false,
+                    meta: false,
                 },
             );
             let actor = r.key_arg(node, 0);
@@ -602,6 +683,7 @@ fn message(r: &mut Reader, node: &KdlNode, words: &[&str]) -> Option<Message> {
                     args: (1, 1),
                     props: &[],
                     children: true,
+                    meta: false,
                 },
             );
             let guard = r.text_arg(node, 0, "the guard");
@@ -632,6 +714,7 @@ fn message(r: &mut Reader, node: &KdlNode, words: &[&str]) -> Option<Message> {
                     args: (0, 0),
                     props: &[],
                     children: true,
+                    meta: false,
                 },
             );
             let mut cases = Vec::new();
@@ -649,6 +732,7 @@ fn message(r: &mut Reader, node: &KdlNode, words: &[&str]) -> Option<Message> {
                         args: (1, 1),
                         props: &[],
                         children: true,
+                        meta: false,
                     },
                 );
                 let guard = r.text_arg(child, 0, "the guard");
@@ -737,7 +821,7 @@ fn state(r: &mut Reader, children: &[KdlNode], frame: &mut FrameParts) -> Option
         }
         "transition" => {
             let usage = "transition <from> <to> on=\"<event>\" guard=\"<guard>\" action=\"<action>\" focal=#true";
-            let ends = ends(r, node, usage, &["on", "guard", "action", "focal"]);
+            let ends = ends(r, node, usage, &["on", "guard", "action", "focal"], false);
             let on = r.text_prop(node, "on");
             let guard = r.text_prop(node, "guard");
             let action = r.text_prop(node, "action");
@@ -774,6 +858,7 @@ fn state(r: &mut Reader, children: &[KdlNode], frame: &mut FrameParts) -> Option
                     args: (1, 1),
                     props: &["on"],
                     children: false,
+                    meta: false,
                 },
             );
             let to = r.key_arg(node, 0);
@@ -878,6 +963,7 @@ fn lane_head(r: &mut Reader, node: &KdlNode, usage: &str, props: &[&str]) -> Opt
             args: (1, 2),
             props,
             children: true,
+            meta: false,
         },
     );
     let key = r.key_arg(node, 0);
@@ -925,6 +1011,7 @@ fn process(r: &mut Reader, children: &[KdlNode], frame: &mut FrameParts) -> Opti
                     args: (1, 2),
                     props: &["focal"],
                     children: false,
+                    meta: false,
                 },
             );
             let key = r.key_arg(node, 0);
@@ -1005,7 +1092,7 @@ fn process(r: &mut Reader, children: &[KdlNode], frame: &mut FrameParts) -> Opti
         }
         "line" => {
             let usage = "line <from> <to> trigger=#true";
-            let ends = ends(r, node, usage, &["trigger"]);
+            let ends = ends(r, node, usage, &["trigger"], false);
             let trigger = r.bool_prop(node, "trigger");
             match ends {
                 Some((from, to)) => out.lines.push(Handoff {
@@ -1029,7 +1116,7 @@ const BRANCH: ItemSpec = ItemSpec {
     keyed: false,
     extra: &[],
     children: true,
-    usage: "item \"<name>\" pile=\"@pile\" sub=\"<second line>\" focal=#true { item … }",
+    usage: "item \"<name>\" sub=\"<second line>\" focal=#true { item … }",
 };
 
 /// ```kdl
@@ -1114,7 +1201,7 @@ fn branch(r: &mut Reader, node: &KdlNode, parent: &str) -> Option<Branch> {
 /// ```kdl
 /// diagram nested version=1 {
 ///   level "the git repository" {
-///     level pile="@multipile" sub=":/" {
+///     level "multipile" sub=":/" {
 ///       level "renderer/" focal=#true
 ///     }
 ///   }
@@ -1125,7 +1212,7 @@ fn nested(r: &mut Reader, children: &[KdlNode], frame: &mut FrameParts) -> Optio
     let mut levels = Vec::new();
     let mut ok = true;
     let spec = ItemSpec {
-        usage: "level \"<label>\" pile=\"@pile\" sub=\"<second line>\" focal=#true { level … }",
+        usage: "level \"<label>\" sub=\"<second line>\" focal=#true { level … }",
         ..BRANCH
     };
     let mut outer = 0;
@@ -1148,6 +1235,11 @@ fn nested(r: &mut Reader, children: &[KdlNode], frame: &mut FrameParts) -> Optio
                     ok = false;
                     return;
                 };
+                // A level an old file gave a pile is labelled as the pile
+                // is named: `@html`, or its `:/` path.
+                if Reader::prop_entry(node, "pile").is_some() && !level.name.starts_with(":/") {
+                    level.name = format!("@{}", level.name);
+                }
                 level.key = format!("level-{}", levels.len() + 1);
                 levels.push(level);
                 let inner = Reader::children(node);
@@ -1184,7 +1276,7 @@ fn nested(r: &mut Reader, children: &[KdlNode], frame: &mut FrameParts) -> Optio
 /// diagram treemap version=1 {
 ///   measure "lines of Rust"
 ///   source "wc -l, 2026-11-11"
-///   part cli pile="@cli" value=7464 short=CLI
+///   part cli value=7464 short=CLI
 ///   part render "render" value=6845 focal=#true
 /// }
 /// ```
@@ -1198,7 +1290,7 @@ fn treemap(r: &mut Reader, children: &[KdlNode], frame: &mut FrameParts) -> Opti
         keyed: true,
         extra: &["value", "short"],
         children: false,
-        usage: "part <key> \"<name>\" pile=\"@pile\" value=<number> short=ABC focal=#true",
+        usage: "part <key> \"<name>\" value=<number> short=ABC focal=#true",
     };
     each(r, children, frame, |r, node| match node.name().value() {
         name @ ("measure" | "source") => {
@@ -1210,6 +1302,7 @@ fn treemap(r: &mut Reader, children: &[KdlNode], frame: &mut FrameParts) -> Opti
                     args: (1, 1),
                     props: &[],
                     children: false,
+                    meta: false,
                 },
             );
             let text = r.text_arg(node, 0, name);

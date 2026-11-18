@@ -36,18 +36,15 @@ pub fn layout(body: &Nested, canvas: &mut Canvas) {
             inner_w + 2 * PAD * inside,
             inner_h + (LABEL_H + PAD) * inside,
         );
-        let mut name = level.name.clone();
-        if level.pile.is_some() && !name.starts_with(":/") {
-            name = format!("@{name}");
-        }
         canvas.push(
             format!("level:{}", level.key),
             index as u32,
             Shape::Region(RegionShape {
-                pile: level.pile.as_ref().map(|pile| pile.reference.clone()),
+                key: Some(level.key.clone()),
+                meta: metadata(&level.meta),
                 rect,
                 kind: RegionKind::Level,
-                label: Some(name),
+                label: Some(level.name.clone()),
                 sub: level.sub.clone(),
                 dashed: false,
                 focal: level.focal,

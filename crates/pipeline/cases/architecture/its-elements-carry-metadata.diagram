@@ -1,0 +1,21 @@
+diagram architecture version=1 {
+  title "A shop, and who owns each part"
+  desc "The storefront calls the orders service, which keeps its orders in a database and tells the mailer."
+  note "Each box and line says who owns it, in metadata the diagram keeps and never reads."
+  flow right
+
+  box storefront "storefront" as=input team:owner="web" team:on-call=#false
+  box orders "orders" focal=#true team:owner="orders" team:tier=1 {
+    box checkout "checkout" team:owner="payments"
+  }
+  box database "database" as=store team:owner="platform" team:tier=1
+  box mailer "mailer" as=external team:owner="growth" team:uptime=99.5
+
+  tier storefront
+  tier orders
+  tier database mailer
+
+  line storefront orders label="HTTP" kind=link team:contract="orders-api" team:version=2
+  line orders database label="write" team:contract="orders-schema"
+  line orders mailer label="event" kind=async
+}

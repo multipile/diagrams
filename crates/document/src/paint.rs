@@ -196,8 +196,20 @@ impl Painter {
             Shape::Line(shape) => line_node(shape, status, marking),
         };
         node.id = Some(element.id.clone());
-        if let Shape::Box(shape) = &element.shape {
-            node.pile = shape.pile.clone();
+        match &element.shape {
+            Shape::Box(shape) => {
+                node.key = shape.key.clone();
+                node.meta = shape.meta.clone();
+            }
+            Shape::Region(shape) => {
+                node.key = shape.key.clone();
+                node.meta = shape.meta.clone();
+            }
+            Shape::Line(shape) => {
+                node.ends = shape.ends.clone();
+                node.meta = shape.meta.clone();
+            }
+            Shape::Text(_) | Shape::Dot(_) => {}
         }
         if matches!(marking, Marking::Ghost) {
             node.style.opacity = Some(0.4);

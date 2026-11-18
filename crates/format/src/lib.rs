@@ -7,6 +7,11 @@
 //! readable, so a file never has to be rewritten because the format moved.
 //! Another format, or another version, is read into the same [`Diagram`].
 //!
+//! A file may give an element, a line or the whole diagram metadata: a
+//! property written `<owner>:<key>`, or a `meta <owner> { … }` block. It is
+//! kept as it is written, with where it is written, and never read: whoever
+//! owns it gives it its meaning ([`Meta`], [`MetaBlock`]).
+//!
 //! Reading checks the rules every diagram is held to, and its type's limits.
 //! A file that breaks any of them is refused with every [`Finding`], each at
 //! its line and column, and with what fixes it.
@@ -16,8 +21,8 @@
 //! diagram dependency version=1 {
 //!   title "How the crates depend on one another"
 //!   desc "The cli crate depends on storage."
-//!   box cli pile="@cli"
-//!   box storage pile="@storage"
+//!   box cli
+//!   box storage docs:page="storage.md"
 //!   line cli storage
 //! }
 //! "#).unwrap();

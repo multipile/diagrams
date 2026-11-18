@@ -1,0 +1,18 @@
+diagram dependency version=1 {
+  title "Four crates, each tied to what it stands for"
+  desc "The command depends on the reader and the writer, and all three depend on the model."
+  note "A host that knows piles reads pile:id and pile:edge. The diagram only carries them."
+
+  box command pile:id="3f9c2b7e0a1d4c5e8f6a7b9c0d1e2f3a"
+  box reader pile:id="7a10c4d2e5b84f6391d0a2b3c4d5e6f7"
+  box writer pile:id="b2e4f6081a3c4d5e9f7061728394a5b6"
+  box model pile:id="c0ffee00112233445566778899aabbcc"
+  box serde pile:id="00112233445566778899aabbccddeeff" pile:node-type=external as=external
+
+  line command reader pile:edge="relies-on"
+  line command writer pile:edge="relies-on"
+  line reader model pile:edge="relies-on"
+  line writer model pile:edge="relies-on"
+  line model serde
+  cycle model command pile:edge="calls-back"
+}

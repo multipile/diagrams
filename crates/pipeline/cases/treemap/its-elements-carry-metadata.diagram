@@ -1,0 +1,11 @@
+diagram treemap version=1 {
+  title "What a month of hosting costs, by service"
+  desc "The database costs the most, then compute, then storage, and the rest is small."
+  measure "dollars per month"
+  source "the March invoice"
+
+  part database "database" value=4200 focal=#true bill:account="prod" bill:reserved=#true
+  part compute "compute" value=3100 bill:account="prod" bill:reserved=#false
+  part storage "storage" value=900 short=STO bill:account="shared" bill:growth=1.5
+  part network "network" value=300 short=NET bill:account="shared" bill:line=17
+}

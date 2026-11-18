@@ -1,0 +1,21 @@
+diagram sequence version=1 {
+  title "A sign-in, and the trace it was drawn from"
+  desc "The browser sends the password to the app, which checks it with the identity service."
+
+  actor browser "browser" as=input
+  actor app "app"
+  actor identity "identity" as=external
+
+  call browser app "sign in"
+  call app identity "check password" link=#true
+  reply identity app "valid"
+  opt "first sign-in" {
+    self app "create profile"
+  }
+  reply app browser "session"
+
+  meta trace {
+    recorded "2026-02-11T09:30:00Z" spans=5
+    sampled #true rate=0.25
+  }
+}

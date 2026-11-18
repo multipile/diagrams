@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use diagram_format::{Dependency, Flow, Item, LineKind, Look, rules};
+use diagram_format::{Dependency, Flow, Item, Look, rules};
 
 use super::{Canvas, item_box, line_shape, uniform_height, uniform_width};
 use crate::geometry::{Ports, Side, across, snap};
@@ -104,13 +104,11 @@ pub fn layout(body: &Dependency, canvas: &mut Canvas) {
         *slot += 1;
         let points = across(start, end, down, after + offset, before - offset, &others, 0);
         let rank = ranks.get(&line.to).copied().unwrap_or(1) as u32;
-        canvas.line(
+        canvas.written_line(
             format!("line:{}->{}", line.from, line.to),
             (2 * rank).saturating_sub(1),
             points,
-            LineKind::Call,
-            line.focal,
-            None,
+            line,
         );
     }
 
@@ -134,11 +132,10 @@ pub fn layout(body: &Dependency, canvas: &mut Canvas) {
             ]
         };
         let last = rows.len() as u32 * 2;
-        canvas.push(
-            format!("cycle:{}->{}", cycle.from, cycle.to),
-            last,
-            Shape::Line(line_shape(points, Head::Arrow, false, Tone::Accent, Some("cycle"))),
-        );
+        let mut shape = line_shape(points, Head::Arrow, false, Tone::Accent, Some("cycle"));
+        shape.ends = Some((cycle.from.clone(), cycle.to.clone()));
+        shape.meta = metadata(&cycle.meta);
+        canvas.push(format!("cycle:{}->{}", cycle.from, cycle.to), last, Shape::Line(shape));
     }
 }
 

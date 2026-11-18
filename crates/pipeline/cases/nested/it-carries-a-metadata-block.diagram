@@ -1,0 +1,15 @@
+diagram nested version=1 {
+  title "Where a request is allowed, and who signed it off"
+  desc "The network holds the cluster, which holds the namespace."
+
+  level "the network" {
+    level "the cluster" sub="eu-west" {
+      level "the namespace" sub="orders" focal=#true
+    }
+  }
+
+  meta policy {
+    signed "the security team" on="2026-01-20"
+    expires days=365
+  }
+}

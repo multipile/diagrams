@@ -1,0 +1,17 @@
+diagram state version=1 {
+  title "An order, and the code that moves it"
+  desc "An order is placed, then paid, then shipped."
+  flow right
+
+  state placed "Placed" start=#true
+  state paid "Paid" focal=#true
+  state shipped "Shipped" end=#true
+
+  transition placed paid on="pay"
+  transition paid shipped on="ship"
+
+  meta code {
+    enum "OrderState" file="src/order.rs" line=14
+    generated #false
+  }
+}

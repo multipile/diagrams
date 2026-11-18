@@ -63,8 +63,16 @@ pub struct Node {
     /// The element of the scene it draws, the same in every version of the
     /// diagram: `box:cli`.
     pub id: Option<String>,
-    /// The pile a box stands for, as the file named it.
-    pub pile: Option<String>,
+    /// The key of the element it draws, when the file names the element by
+    /// one: a box, a state, a level.
+    pub key: Option<String>,
+    /// The keys of the two elements it joins, from and to, when it draws a
+    /// line the file may give metadata.
+    pub ends: Option<(String, String)>,
+    /// The metadata of the element or the line it draws: each property as
+    /// `<owner>-<key>` and its value as text. The document carries it and
+    /// never reads it.
+    pub meta: Vec<(String, String)>,
     pub place: Place,
     pub style: Style,
     /// The track that moves it, by index into [`Document::tracks`].
@@ -76,7 +84,9 @@ impl Node {
     pub fn new(place: Place, style: Style) -> Node {
         Node {
             id: None,
-            pile: None,
+            key: None,
+            ends: None,
+            meta: Vec::new(),
             place,
             style,
             track: None,

@@ -1,0 +1,9 @@
+// expect: meta-invalid at 6:3
+diagram dependency version=1 {
+  title "A metadata block nobody owns"
+  desc "A metadata block says whose metadata it holds."
+  box cli
+  meta {
+    page "cli.md"
+  }
+}

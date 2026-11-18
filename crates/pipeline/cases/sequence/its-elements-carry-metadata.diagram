@@ -1,0 +1,16 @@
+diagram sequence version=1 {
+  title "A sign-in, and where each actor runs"
+  desc "The browser sends the password to the app, which checks it with the identity service and answers with a session."
+
+  actor browser "browser" as=input ops:runs-in="the user's machine"
+  actor app "app" ops:runs-in="eu-west" ops:replicas=3
+  actor identity "identity" as=external ops:runs-in="a vendor" ops:ours=#false
+
+  call browser app "sign in"
+  call app identity "check password" link=#true
+  reply identity app "valid"
+  opt "first sign-in" {
+    self app "create profile"
+  }
+  reply app browser "session" focal=#true
+}

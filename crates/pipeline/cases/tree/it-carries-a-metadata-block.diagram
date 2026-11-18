@@ -1,0 +1,15 @@
+diagram tree version=1 {
+  title "A site's pages, and how it is built"
+  desc "The home page leads to the guide and the reference."
+  flow down
+
+  item "home" {
+    item "guide" focal=#true
+    item "reference"
+  }
+
+  meta site {
+    generator "a static site builder" version=3
+    output "public/" clean=#true
+  }
+}

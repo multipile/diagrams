@@ -1,0 +1,16 @@
+diagram treemap version=1 {
+  title "What a month of hosting costs, and its budget"
+  desc "The database costs the most, then compute, then storage, and the network the least."
+  measure "dollars per month"
+  source "the March invoice"
+
+  part database "database" value=4200 focal=#true
+  part compute "compute" value=3100
+  part storage "storage" value=900 short=STO
+  part network "network" value=300 short=NET
+
+  meta budget {
+    limit 9000 currency="USD"
+    alert at=0.9 to="finance"
+  }
+}

@@ -1,0 +1,17 @@
+diagram swimlane version=1 {
+  title "A refund, and how long each step may take"
+  desc "Support opens the refund, finance approves and pays it, and support tells the customer."
+
+  lane support "Support" {
+    step open "Open the refund" sla:hours=4
+    step tell "Tell the customer" sla:hours=24 sla:template="refund-paid"
+  }
+  lane finance "Finance" {
+    step approve "Approve" sla:hours=48 sla:needs-two=#true
+    step pay "Pay" focal=#true sla:hours=72
+  }
+
+  line open approve sla:queue="refunds"
+  line approve pay label="approved"
+  line pay tell label="paid" sla:queue="notices" sla:retries=3
+}

@@ -180,18 +180,18 @@ fn every_type_can_be_diffed_against_a_changed_copy_of_itself() {
 }
 
 #[test]
-fn a_diagram_marks_the_boxes_of_the_piles_a_change_touched() {
+fn a_diagram_marks_the_elements_a_change_touched_by_key() {
     let renderer = renderer();
     let case = cases("dependency")
         .into_iter()
         .find(|c| c.name.ends_with("the-cli-crates"))
         .unwrap();
-    let document = diagram_pipeline::changed_document(&case.source, &["@storage", "@nothing"]).unwrap();
+    let document = diagram_pipeline::changed_document(&case.source, &["storage", "nothing"]).unwrap();
     let html = diagram_html::page(&document, &diagram_pipeline::Options::default());
     assert_eq!(
         counted(&html, "changed"),
         1,
-        "only the pile the diagram shows is marked"
+        "only the element the diagram shows is marked"
     );
     assert_eq!(counted(&html, "added") + counted(&html, "removed"), 0);
     assert!(html.contains("CHANGED: storage"), "it is listed under the diagram");
@@ -200,15 +200,113 @@ fn a_diagram_marks_the_boxes_of_the_piles_a_change_touched() {
     keep("the-cli-crates-storage-changed", "png", &png);
     let unmarked = diagram_pipeline::changed_document(&case.source, &[]).unwrap();
     assert!(!diagram_html::page(&unmarked, &diagram_pipeline::Options::default()).contains("data-id=\"badge:"));
+    // What the file once called the box's pile is not its key.
+    let by_pile = diagram_pipeline::changed_document(&case.source, &["@storage"]).unwrap();
+    assert_eq!(by_pile.changes.unwrap().changed, 0);
 }
 
 #[test]
-fn a_nested_level_that_is_a_pile_is_marked_too() {
+fn a_diagram_marks_a_line_by_the_keys_of_its_two_ends() {
+    let renderer = renderer();
+    let case = cases("dependency")
+        .into_iter()
+        .find(|c| c.name.ends_with("its-elements-carry-metadata"))
+        .unwrap();
+    let document =
+        diagram_pipeline::changed_document(&case.source, &["command->reader", "reader->command", "model->command"])
+            .unwrap();
+    assert_eq!(
+        document.changes.unwrap().changed,
+        2,
+        "the line and the cycle, and no line the other way"
+    );
+    let marked: Vec<&str> = document
+        .nodes
+        .iter()
+        .filter(|node| {
+            node.children()
+                .iter()
+                .any(|child| child.id.as_deref() == Some("badge:changed"))
+        })
+        .filter_map(|node| node.id.as_deref())
+        .filter(|id| !id.starts_with("ledger:"))
+        .collect();
+    assert_eq!(marked, vec!["line:command->reader", "cycle:model->command"]);
+    let html = diagram_html::page(&document, &diagram_pipeline::Options::default());
+    assert!(
+        html.contains("CHANGED: command → reader · model → command"),
+        "they are listed under the diagram"
+    );
+    let png = renderer.still(&document, StillFormat::Png, None).unwrap();
+    keep("a-line-and-a-cycle-changed", "png", &png);
+}
+
+#[test]
+fn the_command_marks_the_keys_and_the_lines_it_is_given() {
+    let case = cases("swimlane")
+        .into_iter()
+        .find(|c| c.name.ends_with("its-elements-carry-metadata"))
+        .unwrap();
+    let out = out_dir().join("diff").join("a-refund-marked-by-the-command.html");
+    std::fs::create_dir_all(out.parent().unwrap()).unwrap();
+    let status = std::process::Command::new(env!("CARGO_BIN_EXE_diagram"))
+        .arg("render")
+        .arg(&case.path)
+        .arg("-o")
+        .arg(&out)
+        .args(["--changed", "pay, open->approve"])
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let html = std::fs::read_to_string(&out).unwrap();
+    assert_eq!(counted(&html, "changed"), 2);
+    assert!(html.contains("CHANGED: open → approve · Pay"), "{}", case.name);
+}
+
+#[test]
+fn a_nested_level_is_marked_by_its_place_from_the_outside() {
     let case = cases("nested")
         .into_iter()
         .find(|c| c.name.ends_with("which-pile-a-path-is-in"))
         .unwrap();
-    let document = diagram_pipeline::changed_document(&case.source, &["@html"]).unwrap();
+    let document = diagram_pipeline::changed_document(&case.source, &["level-3"]).unwrap();
     let html = diagram_html::page(&document, &diagram_pipeline::Options::default());
     assert_eq!(counted(&html, "changed"), 1);
+    assert!(html.contains("CHANGED: @html"));
+}
+
+#[test]
+fn metadata_that_changes_alone_is_a_change() {
+    let case = cases("swimlane")
+        .into_iter()
+        .find(|c| c.name.ends_with("its-elements-carry-metadata"))
+        .unwrap();
+    let diagram = |source: &str| diagram_pipeline::read(source).unwrap().diagram;
+    let changed = |after: &str| {
+        assert_ne!(case.source, after);
+        diagram_document::diff_document(&diagram(&case.source), &diagram(after), false)
+            .unwrap()
+            .changes
+            .unwrap()
+    };
+    let step = changed(&case.source.replace("sla:hours=4\n", "sla:hours=8\n"));
+    assert_eq!((step.added, step.removed, step.changed), (0, 0, 1), "a step's");
+    let line = changed(&case.source.replace("sla:queue=\"refunds\"", "sla:queue=\"returns\""));
+    assert_eq!((line.added, line.removed, line.changed), (0, 0, 1), "a line's");
+    let gained = changed(
+        &case
+            .source
+            .replace("label=\"approved\"", "label=\"approved\" sla:queue=\"payouts\""),
+    );
+    assert_eq!(gained.changed, 1, "a line that gains some");
+    let nested = cases("nested")
+        .into_iter()
+        .find(|c| c.name.ends_with("its-elements-carry-metadata"))
+        .unwrap();
+    let after = nested.source.replace("policy:rank=3", "policy:rank=4");
+    let level = diagram_document::diff_document(&diagram(&nested.source), &diagram(&after), false)
+        .unwrap()
+        .changes
+        .unwrap();
+    assert_eq!(level.changed, 1, "a level's");
 }

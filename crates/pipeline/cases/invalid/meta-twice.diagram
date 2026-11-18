@@ -1,0 +1,12 @@
+// expect: meta-twice at 9:3
+diagram dependency version=1 {
+  title "Two metadata blocks of one owner"
+  desc "An owner writes its metadata in one block."
+  box cli
+  meta docs {
+    page "cli.md"
+  }
+  meta docs {
+    page "storage.md"
+  }
+}
