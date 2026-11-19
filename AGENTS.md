@@ -4,7 +4,7 @@ This repository takes a multipile diagram from its `.diagram` file to a picture.
 
 ## Piles
 
-The repository declares piles: the top, and one for each crate. Read a pile's `.pile/intent.md` before you change the pile, and keep it true in the same commit.
+The repository declares piles: the top, one for each crate, the cases, what runs on a pull request, and an aux pile with the type its links are of. A link says what one pile relies on of another: read a pile's links before you change it. Read a pile's `.pile/intent.md` before you change the pile, and keep it true in the same commit.
 
 ## Working here
 

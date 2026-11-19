@@ -1,0 +1,11 @@
+version = "gitpile/1"
+
+[[edges]]
+type = "relies-on"
+target = "@cases"
+title = "renders every diagram of, for the gallery"
+
+[[edges]]
+type = "relies-on"
+target = "@pipeline"
+title = "draws each case with the diagram command of"

@@ -1,0 +1,6 @@
+version = "gitpile/1"
+
+[[edges]]
+type = "relies-on"
+target = "@format"
+title = "lays out and paints the diagram it reads"

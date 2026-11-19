@@ -1,0 +1,6 @@
+version = "gitpile/1"
+
+[[edges]]
+type = "relies-on"
+target = "@document"
+title = "renders its document, and registers its fonts"

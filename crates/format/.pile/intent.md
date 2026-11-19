@@ -1,7 +1,5 @@
-Reads every diagram file, at every version of every format it was written in, into one diagram, and holds that diagram to the rules every diagram and its type are held to.
+The only place that knows what a diagram file may say: everything past it works on one diagram, whatever format or version wrote the file.
 
-What belongs here is what a diagram is (the model every reader reads into), the reader of each format and each of its versions, and the rules and limits, each broken one reported at the line that wrote it with what fixes it. Where anything is drawn, or how it looks, does not belong here.
+What belongs here is the diagram every reader reads into, the reader of each format and each of its versions, and the rules and limits a diagram is held to, each broken one reported at the line that wrote it with what fixes it. Metadata, what a file says for whoever reads the diagram afterwards, is kept as it is written, with where it is written, and is never read: only metadata that cannot be kept is refused. Nothing that places or draws an element belongs here, and no word that means something to one caller alone: such a word is metadata, and its meaning is its caller's.
 
-A diagram also carries metadata: what a file says of an element, a line or the whole diagram for whoever reads the diagram after this pile. This pile keeps metadata as it is written, with where it is written, and never reads it. It refuses only metadata it cannot keep. What any of it means belongs to the host that owns it, never here. The one exception is old: version 1 was first written with `pile=` and `id=` on a box, and its reader still reads those two words, into metadata.
-
-Read this pile to find out what a diagram file may say, and what a diagram is. Change it when a format or a version is added, a type gains or loses a word, or a rule or a limit moves.
+Read this pile to find out what a diagram file may say, and what a diagram is. Change it when it is decided that a diagram may say something new, or a rule or a limit is decided again.
