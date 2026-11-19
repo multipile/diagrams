@@ -9,7 +9,8 @@ permissions:
   contents: read
 
 jobs:
-  # Everything the flake checks: the build, the tests, clippy and rustfmt.
+  # Everything the flake checks: the build, the tests, clippy, rustfmt, and
+  # the cases built as data.
   flake-check:
     runs-on: ubuntu-latest
     steps:

@@ -161,11 +161,42 @@ The flake gives the `diagram` command as `packages.default`, and pins the Rust i
 inputs.diagrams.url = "github:multipile/diagrams";
 ```
 
+It also gives the cases as data, as `packages.cases`, for a repository that draws diagrams with these crates and wants to test itself on every diagram they promise something about:
+
+```sh
+nix build github:multipile/diagrams#cases
+```
+
+The directory it builds holds every file of [`crates/pipeline/cases/`](crates/pipeline/cases), at the same path, and `cases.json`, which lists them. The manifest is made from the files when the directory is built: a case is added by adding its file. A flake takes the directory as it is, or builds its own from it.
+
+```json
+{
+  "cases": [
+    { "kind": "valid", "group": "tree", "name": "a-pile-directory", "type": "tree",
+      "path": "tree/a-pile-directory.diagram" },
+    { "kind": "invalid", "group": "invalid", "name": "cell-taken",
+      "path": "invalid/cell-taken.diagram",
+      "expect": { "code": "cell-taken", "line": 8, "column": 5 } },
+    { "kind": "diff", "group": "diff", "name": "a-crate-is-added",
+      "before": "diff/a-crate-is-added/before.diagram",
+      "after": "diff/a-crate-is-added/after.diagram" }
+  ]
+}
+```
+
+| Kind | What the case is | What it carries |
+| --- | --- | --- |
+| `valid` | a diagram that must read and draw | `type`, its diagram type, and `path` |
+| `invalid` | a file that must be refused | `path`, and `expect`: the finding its first line says, as `code`, `line` and `column` |
+| `diff` | two versions of one diagram, to compare | `before` and `after` |
+
+Every case has its `group`, the directory it is in, and its `name`. Every path is relative to the directory. [`cases.nix`](cases.nix) builds it, and refuses a case that is malformed: a file in no group, a file to refuse that does not say the finding it expects, or a pair with one version missing.
+
 ## Check it
 
 ```sh
 nix develop         # the pinned Rust
-nix flake check     # build, every test, clippy and rustfmt, as CI does
+nix flake check     # build, every test, clippy, rustfmt and the cases as data, as CI does
 cargo test          # the same tests
 ```
 
