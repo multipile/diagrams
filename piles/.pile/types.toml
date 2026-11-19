@@ -1,0 +1,9 @@
+version = "gitpile/1"
+
+[[edge-types]]
+name = "relies-on"
+title = "one pile relies on what another is for"
+source = ["pile"]
+target = ["pile"]
+do = "say what the source relies on, in words of the target's intent"
+dont = "name a file or a path"
