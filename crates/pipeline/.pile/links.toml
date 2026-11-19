@@ -19,3 +19,8 @@ title = "writes the document as a page with"
 type = "relies-on"
 target = "@render"
 title = "renders the document as a picture with"
+
+[[edges]]
+type = "relies-on"
+target = "@cases"
+title = "runs its end-to-end tests on the diagrams of"
