@@ -64,6 +64,10 @@
               meta.mainProgram = "diagram";
             };
             cargoArtifacts = craneLib.buildDepsOnly common;
+            # The cases as data, for another repository's tests: every case
+            # file and cases.json, which lists them. cases.nix says its
+            # shape. It is the same on every system.
+            cases = pkgs.callPackage ./cases.nix { };
           in
           f {
             inherit
@@ -72,21 +76,23 @@
               craneLib
               common
               cargoArtifacts
+              cases
               ;
           }
         );
     in
     {
       packages = forAll (
-        { craneLib, common, cargoArtifacts, ... }:
+        { craneLib, common, cargoArtifacts, cases, ... }:
         {
           # The diagram command, built with every test run.
           default = craneLib.buildPackage (common // { inherit cargoArtifacts; });
+          inherit cases;
         }
       );
 
       checks = forAll (
-        { craneLib, common, cargoArtifacts, ... }:
+        { pkgs, craneLib, common, cargoArtifacts, cases, ... }:
         {
           # The same derivation as packages.default, so it is built once.
           build = craneLib.buildPackage (common // { inherit cargoArtifacts; });
@@ -99,6 +105,23 @@
             }
           );
           fmt = craneLib.cargoFmt { inherit (common) src pname version; };
+          # Building the cases refuses a case that is malformed. This holds
+          # what was built to the files: the manifest lists every file the
+          # directory holds, and holds every file it lists.
+          cases = pkgs.runCommand "diagram-cases-check" { nativeBuildInputs = [ pkgs.jq ]; } ''
+            cd ${cases}
+            jq -r '.cases[] | .path // (.before, .after)' cases.json | sort > $TMPDIR/listed
+            find . -type f ! -path ./cases.json | sed 's|^\./||' | sort > $TMPDIR/held
+            if ! diff $TMPDIR/listed $TMPDIR/held; then
+              echo "cases.json and the files beside it differ: < is listed only, > is a file only" >&2
+              exit 1
+            fi
+            for kind in valid invalid diff; do
+              jq -e --arg kind "$kind" 'any(.cases[]; .kind == $kind)' cases.json > /dev/null \
+                || { echo "cases.json lists no $kind case" >&2; exit 1; }
+            done
+            touch $out
+          '';
         }
       );
 

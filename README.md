@@ -88,11 +88,7 @@ Only what makes metadata unreadable is refused: `meta-invalid` for a name that i
 
 A reader gets metadata with where it is written. For a string, it also gets where each of the string's lines starts in the file, so a host that keeps a small language in a string (in a raw string, `#"…"#`, or a multi-line one, `#"""…"""#`) can report a mistake at its line and column in the `.diagram` file.
 
-A page writes each property of an element or a line on that element's `<div>`, as `data-<owner>-<key>="<value>"`: `data-docs-page="storage.md"`. A `meta` node is not written to the page, and no metadata changes a picture. In a diff, an element whose metadata changed is marked as changed.
-
-### What version 1 still reads
-
-Version 1 was first written with two properties that named what a box stands for: `pile="@cli"`, or `pile=":/crates/cli"`, and `id="<32 hex characters>"` beside it. A file that has them still reads and draws as it did. They are read into the metadata `pile:ref` and `pile:id`, and a box with a `pile` and no name still shows that name. A new file writes metadata.
+A page writes each property of an element or a line on that element's `<div>`, as `data-<owner>-<key>="<value>"`: `data-docs-page="storage.md"`. A `meta` node is not written to the page, and no metadata changes a picture. Metadata is no part of a comparison either: two versions are compared by what is drawn, so an element whose metadata alone changed is not reported. A host that finds in its own metadata that an element now stands for something else reports it as changed, and it is drawn as changed.
 
 ## Use it
 
@@ -114,6 +110,8 @@ nix run github:multipile/diagrams -- diff before.diagram after.diagram -o change
 nix run github:multipile/diagrams -- render my.diagram -o my.png --changed 'storage,cli->storage'
 ```
 
+`diff --changed <keys>` takes the same list, and adds those to what is drawn differently.
+
 ### From Rust
 
 Take the crates of the steps you need from this repository, at a commit:
@@ -133,7 +131,25 @@ let page = diagram_html::page(&document, &diagram_html::Options::default());
 let gif = diagram_render::Renderer::new().animation(&document, diagram_render::MotionFormat::Gif, 25)?;
 ```
 
-A host reads a diagram's metadata from `read.diagram`: `meta` on each element and line, and `read.diagram.meta` for the blocks. `diagram_document::changed_document(&read.diagram, |mark| …)` gives the document with what the host says changed marked. It asks about each element by its key (`Mark::Element`) and each line by the keys of its two ends (`Mark::Line`).
+A host reads a diagram's metadata from `read.diagram`: `meta` on each element and line, and `read.diagram.meta` for the blocks.
+
+Two versions are compared, and the comparison drawn, in two steps, so that the host decides what changed:
+
+```rust
+use diagram_document::Subject;
+
+// What is drawn differently, as plain data: `added`, `removed` and `changed`.
+let mut report = diagram_document::compare(&before, &after)?;
+// The host's own decision: this box is drawn the same, and stands for something else.
+report.change(Subject::element("storage"));
+report.change(Subject::line("cli", "storage"));
+// Exactly what the report says, still or animated.
+let document = diagram_document::diff_document(&before, &after, &report, false)?;
+```
+
+A report names an element by its key (`Subject::Element`), a line by the keys of its two ends (`Subject::Line`), and anything a file names by no key, such as a lane or a message, by the id its layout gives it (`Subject::Shape`). The drawing decides nothing: an element the report does not list is drawn as unchanged, though the two versions draw it differently, and one it lists as changed is marked, though they draw it the same.
+
+`diagram_document::changed_document(&read.diagram, &report)` draws one diagram with what a report says marked, for a diagram whose file did not change though what it shows did.
 
 Reading, painting and writing pages adds about 0.8 MB to a release binary. Rendering pictures adds about 5 MB more, most of it takumi.
 
@@ -145,11 +161,42 @@ The flake gives the `diagram` command as `packages.default`, and pins the Rust i
 inputs.diagrams.url = "github:multipile/diagrams";
 ```
 
+It also gives the cases as data, as `packages.cases`, for a repository that draws diagrams with these crates and wants to test itself on every diagram they promise something about:
+
+```sh
+nix build github:multipile/diagrams#cases
+```
+
+The directory it builds holds every file of [`crates/pipeline/cases/`](crates/pipeline/cases), at the same path, and `cases.json`, which lists them. The manifest is made from the files when the directory is built: a case is added by adding its file. A flake takes the directory as it is, or builds its own from it.
+
+```json
+{
+  "cases": [
+    { "kind": "valid", "group": "tree", "name": "a-pile-directory", "type": "tree",
+      "path": "tree/a-pile-directory.diagram" },
+    { "kind": "invalid", "group": "invalid", "name": "cell-taken",
+      "path": "invalid/cell-taken.diagram",
+      "expect": { "code": "cell-taken", "line": 8, "column": 5 } },
+    { "kind": "diff", "group": "diff", "name": "a-crate-is-added",
+      "before": "diff/a-crate-is-added/before.diagram",
+      "after": "diff/a-crate-is-added/after.diagram" }
+  ]
+}
+```
+
+| Kind | What the case is | What it carries |
+| --- | --- | --- |
+| `valid` | a diagram that must read and draw | `type`, its diagram type, and `path` |
+| `invalid` | a file that must be refused | `path`, and `expect`: the finding its first line says, as `code`, `line` and `column` |
+| `diff` | two versions of one diagram, to compare | `before` and `after` |
+
+Every case has its `group`, the directory it is in, and its `name`. Every path is relative to the directory. [`cases.nix`](cases.nix) builds it, and refuses a case that is malformed: a file in no group, a file to refuse that does not say the finding it expects, or a pair with one version missing.
+
 ## Check it
 
 ```sh
 nix develop         # the pinned Rust
-nix flake check     # build, every test, clippy and rustfmt, as CI does
+nix flake check     # build, every test, clippy, rustfmt and the cases as data, as CI does
 cargo test          # the same tests
 ```
 

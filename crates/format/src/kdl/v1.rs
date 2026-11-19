@@ -22,20 +22,15 @@
 //!   index "crates.md" depth=2
 //! }
 //! ```
-//!
-//! Version 1 was first written with two properties that named a pile:
-//! `pile="@cli"`, or `pile=":/crates/cli"`, and `id="<the pile's id>"`
-//! beside it. They still read, into the metadata `pile:ref` and `pile:id`,
-//! and a box with a `pile` and no name shows the pile's name.
 
 use kdl::KdlNode;
 
-use super::{Reader, Shape, entry_span, located, span};
+use super::{Reader, Shape, entry_span, span};
 use crate::finding::Report;
 use crate::model::*;
 
 const FRAME: [&str; 4] = ["title", "desc", "note", "meta"];
-const ITEM_PROPS: [&str; 5] = ["pile", "id", "sub", "as", "focal"];
+const ITEM_PROPS: [&str; 3] = ["sub", "as", "focal"];
 
 pub(super) fn read(node: &KdlNode, kind: Kind, report: &mut Report) -> Option<Diagram> {
     let mut r = Reader { report };
@@ -194,25 +189,7 @@ fn item(r: &mut Reader, node: &KdlNode, spec: &ItemSpec) -> Option<Item> {
     } else {
         None
     };
-    let pile = pile(r, node);
-    let mut meta = pile.clone().unwrap_or_default();
-    let read = meta.len();
-    for written in Reader::meta(node) {
-        if meta[..read]
-            .iter()
-            .any(|old| (&old.owner, &old.key) == (&written.owner, &written.key))
-        {
-            // `pile=` and `id=` are read as `pile:ref` and `pile:id`.
-            r.report.help(
-                "property-repeated",
-                written.span,
-                format!("{}:{} is given twice", written.owner, written.key),
-                "leave out pile= and id=, which version 1 reads as pile:ref and pile:id",
-            );
-            return None;
-        }
-        meta.push(written);
-    }
+    let meta = Reader::meta(node);
     let sub = r.text_prop(node, "sub");
     let look = r
         .word_prop(node, "as", &Look::WORDS)
@@ -220,16 +197,10 @@ fn item(r: &mut Reader, node: &KdlNode, spec: &ItemSpec) -> Option<Item> {
         .unwrap_or_default();
     let focal = r.bool_prop(node, "focal");
     let key = key?;
-    let name = match (name, &pile) {
-        (Some(name), _) => name,
-        // An old file's pile, shown by its name without the `@`, or by
-        // its path.
-        (None, Some(pile)) => match &pile[0].value {
-            MetaValue::Text(reference) => reference.text.strip_prefix('@').unwrap_or(&reference.text).to_string(),
-            _ => unreachable!("a pile is read as text"),
-        },
-        (None, None) if spec.keyed => key.clone(),
-        (None, None) => {
+    let name = match name {
+        Some(name) => name,
+        None if spec.keyed => key.clone(),
+        None => {
             r.report.help(
                 "name-missing",
                 span(node),
@@ -251,49 +222,6 @@ fn item(r: &mut Reader, node: &KdlNode, spec: &ItemSpec) -> Option<Item> {
         meta,
         span: span(node),
     })
-}
-
-/// The two properties version 1 was first written with, `pile="@cli"` and
-/// `id="<the pile's id>"` beside it, as the metadata they are read into:
-/// `pile:ref`, then `pile:id` when the file gives one. An `id` with no
-/// `pile` was never read.
-fn pile(r: &mut Reader, node: &KdlNode) -> Option<Vec<Meta>> {
-    let entry = Reader::prop_entry(node, "pile")?;
-    let reference = r.text(entry, "pile")?;
-    if !(reference.starts_with('@') && reference.len() > 1 || reference.starts_with(":/")) {
-        r.report.help(
-            "pile-invalid",
-            entry_span(entry),
-            format!("{reference:?} names no pile"),
-            "name a pile as pile names one: \"@cli\" by its name, or \":/crates/pile\" by its path",
-        );
-        return None;
-    }
-    let mut meta = vec![Meta {
-        owner: "pile".to_string(),
-        key: "ref".to_string(),
-        value: MetaValue::Text(located(entry, &reference)),
-        span: entry_span(entry),
-    }];
-    if let Some(entry) = Reader::prop_entry(node, "id") {
-        let id = r.text(entry, "id")?;
-        if id.len() != 32 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
-            r.report.help(
-                "pile-id-invalid",
-                entry_span(entry),
-                format!("{id:?} is not a pile's id"),
-                "a pile's id is 32 hex characters, as `pile list --full` prints it",
-            );
-            return None;
-        }
-        meta.push(Meta {
-            owner: "pile".to_string(),
-            key: "id".to_string(),
-            value: MetaValue::Text(located(entry, &id)),
-            span: entry_span(entry),
-        });
-    }
-    Some(meta)
 }
 
 fn flow(r: &mut Reader, node: &KdlNode) -> Option<Flow> {
@@ -1235,11 +1163,6 @@ fn nested(r: &mut Reader, children: &[KdlNode], frame: &mut FrameParts) -> Optio
                     ok = false;
                     return;
                 };
-                // A level an old file gave a pile is labelled as the pile
-                // is named: `@html`, or its `:/` path.
-                if Reader::prop_entry(node, "pile").is_some() && !level.name.starts_with(":/") {
-                    level.name = format!("@{}", level.name);
-                }
                 level.key = format!("level-{}", levels.len() + 1);
                 levels.push(level);
                 let inner = Reader::children(node);

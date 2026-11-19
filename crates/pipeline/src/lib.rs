@@ -9,7 +9,7 @@
 
 use std::fmt;
 
-pub use diagram_document::{self as document, Animation, Document, Mark};
+pub use diagram_document::{self as document, Animation, Document, Report, Subject};
 pub use diagram_format::{self as format, Diagram, Findings, Read};
 pub use diagram_html::{self as html, Options};
 pub use diagram_render::{self as render, MotionFormat, Renderer, StillFormat};
@@ -63,27 +63,58 @@ pub fn document(source: &str, animation: Animation) -> Result<Document, Error> {
     Ok(diagram_document::document(&read(source)?.diagram, animation))
 }
 
-/// The document of two versions of a diagram file: still, the second
-/// version with its changes marked; animated, the first becoming the
-/// second.
-pub fn diff_document(before: &str, after: &str, animated: bool) -> Result<Document, Error> {
+/// What a caller names in words: an element by its key, `storage`, or a
+/// line by the keys of its two ends, `cli->storage`.
+pub fn subject(named: &str) -> Subject {
+    match named.split_once("->") {
+        Some((from, to)) => Subject::line(from.trim(), to.trim()),
+        None => Subject::element(named.trim()),
+    }
+}
+
+/// What is drawn differently between two versions of a diagram file, for
+/// its caller to read, change and pass to [`diff_document`].
+pub fn compare(before: &str, after: &str) -> Result<Report, Error> {
+    let (before, after) = (read(before)?, read(after)?);
+    Ok(diagram_document::compare(&before.diagram, &after.diagram)?)
+}
+
+/// The document of two versions of a diagram file, which draws exactly
+/// what `report` says: still, the second version with what the report
+/// lists marked; animated, the first becoming the second.
+pub fn diff_document(before: &str, after: &str, report: &Report, animated: bool) -> Result<Document, Error> {
     let (before, after) = (read(before)?, read(after)?);
     Ok(diagram_document::diff_document(
         &before.diagram,
         &after.diagram,
+        report,
         animated,
     )?)
 }
 
+/// The comparison in one go, as a caller with nothing to decide makes it:
+/// the report [`compare`] gives, with each of `changed` reported as
+/// changed unless the report names it already, drawn by [`diff_document`].
+/// `changed` names an element by its key and a line by the keys of its two
+/// ends, as [`subject`] reads them. `&[]` draws what is drawn differently.
+pub fn compared_document(before: &str, after: &str, animated: bool, changed: &[&str]) -> Result<Document, Error> {
+    let mut report = compare(before, after)?;
+    for named in changed {
+        report.change(subject(named));
+    }
+    diff_document(before, after, &report, animated)
+}
+
 /// A diagram file's document with the elements and the lines in `changed`
-/// marked: an element by its key, `storage`, and a line by the keys of its
-/// two ends, `cli->storage`.
+/// marked as changed: an element by its key, `storage`, and a line by the
+/// keys of its two ends, `cli->storage`.
 pub fn changed_document(source: &str, changed: &[&str]) -> Result<Document, Error> {
     let read = read(source)?;
-    Ok(diagram_document::changed_document(&read.diagram, |mark| match mark {
-        Mark::Element(key) => changed.contains(&key),
-        Mark::Line { from, to } => changed.contains(&format!("{from}->{to}").as_str()),
-    }))
+    let report = Report {
+        changed: changed.iter().map(|named| subject(named)).collect(),
+        ..Report::default()
+    };
+    Ok(diagram_document::changed_document(&read.diagram, &report))
 }
 
 /// A diagram file's page, still or revealed, with its fonts embedded.
@@ -107,16 +138,23 @@ pub fn reveal_at(renderer: &Renderer, source: &str, format: StillFormat, at_ms: 
 }
 
 /// The page of two versions of a diagram file, with its fonts embedded.
-pub fn diff_page(before: &str, after: &str, animated: bool) -> Result<String, Error> {
+/// `changed` is what [`compared_document`] takes.
+pub fn diff_page(before: &str, after: &str, animated: bool, changed: &[&str]) -> Result<String, Error> {
     Ok(diagram_html::page(
-        &diff_document(before, after, animated)?,
+        &compared_document(before, after, animated, changed)?,
         &Options::default(),
     ))
 }
 
 /// Two versions of a diagram file as a still picture, their changes marked.
-pub fn diff_still(renderer: &Renderer, before: &str, after: &str, format: StillFormat) -> Result<Vec<u8>, Error> {
-    Ok(renderer.still(&diff_document(before, after, false)?, format, None)?)
+pub fn diff_still(
+    renderer: &Renderer,
+    before: &str,
+    after: &str,
+    format: StillFormat,
+    changed: &[&str],
+) -> Result<Vec<u8>, Error> {
+    Ok(renderer.still(&compared_document(before, after, false, changed)?, format, None)?)
 }
 
 /// Two versions of a diagram file as an animation, from the first to the
@@ -127,8 +165,9 @@ pub fn diff_animation(
     after: &str,
     format: MotionFormat,
     fps: u32,
+    changed: &[&str],
 ) -> Result<Vec<u8>, Error> {
-    Ok(renderer.animation(&diff_document(before, after, true)?, format, fps)?)
+    Ok(renderer.animation(&compared_document(before, after, true, changed)?, format, fps)?)
 }
 
 /// One moment of the animation from one version of a diagram file to the
@@ -139,6 +178,7 @@ pub fn diff_at(
     after: &str,
     format: StillFormat,
     at_ms: u32,
+    changed: &[&str],
 ) -> Result<Vec<u8>, Error> {
-    Ok(renderer.still(&diff_document(before, after, true)?, format, Some(at_ms))?)
+    Ok(renderer.still(&compared_document(before, after, true, changed)?, format, Some(at_ms))?)
 }

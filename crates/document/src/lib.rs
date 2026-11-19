@@ -33,7 +33,7 @@ pub mod theme;
 
 use diagram_format::Diagram;
 
-pub use diff::Diff;
+pub use diff::{Diff, Report, Subject};
 pub use document::Document;
 pub use layout::layout;
 pub use scene::Scene;
@@ -52,58 +52,6 @@ pub enum Animation {
 /// A diagram's document.
 pub fn document(diagram: &Diagram, animation: Animation) -> Document {
     paint::document(&layout(diagram), animation)
-}
-
-/// What [`changed_document`] asks about: one element or one line of a
-/// diagram, named by the keys the file gives.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mark<'a> {
-    /// An element the file names by a key: a box, an actor, a state, a
-    /// step, a task, a part. A tree's item is named by the names on its
-    /// path from the root, joined by ` / `, and a nested diagram's level by
-    /// `level-1` for the outermost, `level-2` for the next.
-    Element(&'a str),
-    /// A `line` or a `cycle`, by the keys of the two elements it joins.
-    Line { from: &'a str, to: &'a str },
-}
-
-/// A diagram's document with what a change touched marked: each element
-/// and each line `changed` says has changed is outlined and badged as a
-/// still diff marks a change, and listed under the diagram. `changed` is
-/// asked about every element the file names by a key, and about every
-/// `line` and `cycle`. What makes one changed is its caller's to say: the
-/// diagram knows only its keys.
-///
-/// This is how a review shows a diagram whose own file a change did not
-/// touch, though it touched what the diagram shows.
-pub fn changed_document(diagram: &Diagram, changed: impl Fn(Mark) -> bool) -> Document {
-    use scene::{Element, Shape, Status};
-    let scene = layout(diagram);
-    let elements = scene
-        .elements
-        .iter()
-        .map(|element| {
-            let mark = match &element.shape {
-                Shape::Box(shape) => shape.key.as_deref().map(Mark::Element),
-                Shape::Region(shape) => shape.key.as_deref().map(Mark::Element),
-                Shape::Line(shape) => shape.ends.as_ref().map(|(from, to)| Mark::Line { from, to }),
-                _ => None,
-            };
-            let status = if mark.is_some_and(&changed) {
-                Status::Changed
-            } else {
-                Status::Same
-            };
-            diff::DiffElement {
-                element: Element {
-                    status,
-                    ..element.clone()
-                },
-                role: diff::Role::Kept,
-            }
-        })
-        .collect();
-    paint::diff_document(&Diff { scene, elements }, false)
 }
 
 /// Why two diagrams cannot be drawn as one diff.
@@ -127,16 +75,82 @@ impl std::fmt::Display for DiffError {
 
 impl std::error::Error for DiffError {}
 
-/// The document of two versions of a diagram. Still, it is the second
-/// version with what was added, removed and changed marked. Animated, it
-/// moves from the first version to the second.
-pub fn diff_document(before: &Diagram, after: &Diagram, animated: bool) -> Result<Document, DiffError> {
-    if before.kind() != after.kind() {
-        return Err(DiffError::KindsDiffer {
-            before: before.kind().word(),
-            after: after.kind().word(),
-        });
+fn same_kind(before: &Diagram, after: &Diagram) -> Result<(), DiffError> {
+    if before.kind() == after.kind() {
+        return Ok(());
     }
-    let diff = diff::diff(&layout(before), &layout(after));
+    Err(DiffError::KindsDiffer {
+        before: before.kind().word(),
+        after: after.kind().word(),
+    })
+}
+
+/// What is drawn differently between two versions of a diagram, for its
+/// caller to decide with: each element by its key, each line by the keys
+/// of its two ends, and what the file names by no key by its id, as
+/// [`Subject`] says. An element is added when the second version alone
+/// has it, removed when the first alone has it, and changed when both have
+/// it and draw it differently: another name, look or label. Where it is
+/// drawn is no difference, and neither is its metadata, which is no part
+/// of the comparison.
+///
+/// The report decides nothing. A caller may pass it to [`diff_document`]
+/// as it is, or change it first: add what it holds changed though it is
+/// drawn the same, or take out what it holds unchanged.
+///
+/// ```
+/// use diagram_document::Subject;
+/// let read = |boxes: &str| {
+///     let source = format!("diagram dependency version=1 {{\n title \"t\"\n desc \"d\"\n{boxes}\n}}");
+///     diagram_format::read(&source).unwrap().diagram
+/// };
+/// let before = read("box cli\nbox storage\nline cli storage");
+/// let after = read("box cli \"the cli\"\nbox storage\nbox docs\nline cli storage");
+/// let mut report = diagram_document::compare(&before, &after).unwrap();
+/// assert_eq!(report.added, vec![Subject::element("docs")]);
+/// assert_eq!(report.changed, vec![Subject::element("cli")]);
+/// // The caller holds that the line changed too, though it is drawn the same.
+/// report.change(Subject::line("cli", "storage"));
+/// let document = diagram_document::diff_document(&before, &after, &report, false).unwrap();
+/// assert_eq!(document.changes.unwrap().changed, 2);
+/// ```
+pub fn compare(before: &Diagram, after: &Diagram) -> Result<Report, DiffError> {
+    same_kind(before, after)?;
+    Ok(diff::compare(&layout(before), &layout(after)))
+}
+
+/// The document of two versions of a diagram, which draws exactly what
+/// `report` says. Still, it is the second version with what the report
+/// lists as added, removed and changed marked, and listed under it.
+/// Animated, it moves from the first version to the second, and then marks
+/// the same.
+///
+/// It decides nothing. An element the report does not list is drawn as
+/// unchanged, though the two versions draw it differently: still, it is
+/// the second version's, with no mark. An element the report lists as
+/// changed is marked, though both versions draw it the same. An element of
+/// the first version alone is drawn, faded, only when the report lists it.
+/// [`compare`] gives the report of what is drawn differently.
+pub fn diff_document(
+    before: &Diagram,
+    after: &Diagram,
+    report: &Report,
+    animated: bool,
+) -> Result<Document, DiffError> {
+    same_kind(before, after)?;
+    let diff = diff::diff(&layout(before), &layout(after), report);
     Ok(paint::diff_document(&diff, animated))
+}
+
+/// A diagram's document with what `report` says marked: the diagram
+/// compared with itself, as [`diff_document`] draws it, still. Each element
+/// and each line the report lists is outlined and badged, and listed under
+/// the diagram.
+///
+/// This is how a review shows a diagram whose own file a change did not
+/// touch, though it touched what the diagram shows. What makes an element
+/// changed is its caller's to say: the diagram knows only its keys.
+pub fn changed_document(diagram: &Diagram, report: &Report) -> Document {
+    let scene = layout(diagram);
+    paint::diff_document(&diff::diff(&scene, &scene, report), false)
 }
