@@ -4,7 +4,7 @@ diagram sequence version=1 {
 
   actor github "GitHub" as=external
   actor action "the action"
-  actor pile pile="@cli"
+  actor pile "cli"
   actor agent "review agent" as=external
 
   notify github action "push"

@@ -18,7 +18,8 @@ options:
   --scale <n>     pixels of a picture for each pixel of the page (default 2)
   --at <ms>       a picture of the animation at that moment, not of its end
   --changed <keys>   mark these elements changed, each by its key, and these lines,
-                     each by the keys of its two ends: storage,cli->storage";
+                     each by the keys of its two ends: storage,cli->storage.
+                     With diff, they are added to what is drawn differently";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -185,22 +186,27 @@ fn run(args: &[String]) -> Result<(), String> {
             };
             let out = flags.out.as_deref().ok_or(USAGE)?;
             let (b, a) = (read(before)?, read(after)?);
+            let fail = |error: diagram_pipeline::Error| fail(&format!("{before} → {after}"), error);
+            // The command is a caller like any other: it asks what is
+            // drawn differently, adds what it was told changed, and has
+            // that drawn.
+            let mut report = diagram_pipeline::compare(&b, &a).map_err(fail)?;
+            for named in &flags.changed {
+                report.change(diagram_pipeline::subject(named));
+            }
+            let document = |animated: bool| diagram_pipeline::diff_document(&b, &a, &report, animated).map_err(fail);
             let bytes = match out_kind(out, flags.reveal)? {
                 Out::Html => {
-                    let animation = if flags.reveal {
-                        Animation::Reveal
-                    } else {
-                        Animation::None
-                    };
-                    diagram_pipeline::diff_page(&b, &a, animation == Animation::Reveal).map(String::into_bytes)
+                    diagram_pipeline::html::page(&document(flags.reveal)?, &diagram_pipeline::Options::default())
+                        .into_bytes()
                 }
-                Out::Still(format) => match flags.at {
-                    Some(at) => diagram_pipeline::diff_at(&renderer, &b, &a, format, at),
-                    None => diagram_pipeline::diff_still(&renderer, &b, &a, format),
-                },
-                Out::Motion(format) => diagram_pipeline::diff_animation(&renderer, &b, &a, format, flags.fps),
-            }
-            .map_err(|error| fail(&format!("{before} → {after}"), error))?;
+                Out::Still(format) => renderer
+                    .still(&document(flags.at.is_some())?, format, flags.at)
+                    .map_err(|error| fail(error.into()))?,
+                Out::Motion(format) => renderer
+                    .animation(&document(true)?, format, flags.fps)
+                    .map_err(|error| fail(error.into()))?,
+            };
             std::fs::write(out, bytes).map_err(|error| format!("{out}: {error}"))
         }
         _ => Err(format!("no command {command}\n\n{USAGE}")),

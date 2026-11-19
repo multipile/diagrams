@@ -70,14 +70,14 @@ impl Rect {
     }
 }
 
-/// How an element changed between two versions of a diagram.
+/// How an element changed between two versions of a diagram, as a report
+/// says it did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Status {
     #[default]
     Same,
     Added,
     Removed,
-    /// What it says changed: its name, its look, its label.
     Changed,
 }
 
@@ -94,6 +94,14 @@ pub struct Scene {
 impl Scene {
     pub fn element(&self, id: &str) -> Option<&Element> {
         self.elements.iter().find(|element| element.id == id)
+    }
+
+    /// How many elements a report names by `subject`.
+    pub fn count(&self, subject: &crate::Subject) -> usize {
+        self.elements
+            .iter()
+            .filter(|element| element.shape.subject().as_ref() == Some(subject))
+            .count()
     }
 
     /// The last step of the reveal, for its timing.
@@ -142,31 +150,43 @@ impl Shape {
         }
     }
 
-    /// What the shape says, without where it is: two shapes with the same
-    /// signature say the same, wherever each is drawn.
+    /// What the shape draws, without where it is: two shapes with the same
+    /// signature are drawn the same, wherever each is. Metadata is no part
+    /// of it: nothing here reads metadata, and none changes a picture.
     pub fn signature(&self) -> String {
         match self {
             Shape::Box(shape) => {
                 let said = shape.value.as_ref().or(shape.foot.as_ref());
                 format!(
-                    "box|{}|{:?}|{:?}|{}|{:?}|{:?}|{:?}|{:?}",
-                    shape.name, shape.sub, shape.look, shape.focal, shape.corner, said, shape.tags, shape.meta
+                    "box|{}|{:?}|{:?}|{}|{:?}|{:?}|{:?}",
+                    shape.name, shape.sub, shape.look, shape.focal, shape.corner, said, shape.tags
                 )
             }
             Shape::Line(shape) => format!(
-                "line|{:?}|{}|{:?}|{:?}|{:?}",
+                "line|{:?}|{}|{:?}|{:?}",
                 shape.head,
                 shape.dashed,
                 shape.tone,
-                shape.label.as_ref().map(|label| &label.text),
-                shape.meta
+                shape.label.as_ref().map(|label| &label.text)
             ),
             Shape::Region(shape) => format!(
-                "region|{:?}|{}|{}|{:?}|{:?}",
-                shape.label, shape.dashed, shape.focal, shape.kind, shape.meta
+                "region|{:?}|{}|{}|{:?}",
+                shape.label, shape.dashed, shape.focal, shape.kind
             ),
             Shape::Text(shape) => format!("text|{}|{:?}", shape.text, shape.style),
             Shape::Dot(shape) => format!("dot|{}", shape.ring),
+        }
+    }
+
+    /// What a report names the shape by: the key the file names an
+    /// element by, or the keys of the two elements a line joins. None for a
+    /// shape the file names by no key, which a report names by its id.
+    pub fn subject(&self) -> Option<crate::Subject> {
+        match self {
+            Shape::Box(shape) => shape.key.clone().map(crate::Subject::Element),
+            Shape::Region(shape) => shape.key.clone().map(crate::Subject::Element),
+            Shape::Line(shape) => shape.ends.clone().map(|(from, to)| crate::Subject::Line { from, to }),
+            _ => None,
         }
     }
 

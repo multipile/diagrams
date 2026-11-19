@@ -43,8 +43,8 @@ pub fn document(scene: &Scene, animation: Animation) -> Document {
 }
 
 /// The document of two versions of a diagram. Still, it is the second
-/// version with what was added, removed and changed marked, and listed
-/// under it. Animated, it moves from the first version to the second: what
+/// version with what the diff holds added, removed and changed marked, and
+/// listed under it. Animated, it moves from the first version to the second: what
 /// was removed fades, what moved slides to where it is now, what changed
 /// fades from its first version to its second, what was added appears, and
 /// then the marks.
@@ -55,6 +55,11 @@ pub fn diff_document(diff: &Diff, animated: bool) -> Document {
     let mut nodes = vec![heading(&diff.scene)];
     for item in &diff.elements {
         if !animated && item.role == Role::Old {
+            continue;
+        }
+        // The first version's own, which the report does not say was
+        // removed, is no part of the second.
+        if !animated && item.role == Role::Removed && item.element.status == Status::Same {
             continue;
         }
         if !animated && item.role == Role::Removed && overlaps_second(diff, &item.element) {

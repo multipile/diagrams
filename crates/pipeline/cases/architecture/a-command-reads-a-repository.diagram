@@ -5,9 +5,9 @@ diagram architecture version=1 {
   note "No command runs git. Every read goes through the storage interface."
   flow right
 
-  box cli pile="@cli" sub="a command"
-  box piles pile="@piles" sub="which piles there are"
-  box storage pile="@storage" sub="the Storage interface" focal=#true {
+  box cli sub="a command"
+  box piles sub="which piles there are"
+  box storage sub="the Storage interface" focal=#true {
     box git-backend "git backend"
     box memory "memory backend" sub="in tests" as=optional
   }

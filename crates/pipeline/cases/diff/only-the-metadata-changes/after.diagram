@@ -1,0 +1,20 @@
+// diff: added=0 removed=0 changed=0
+diagram dependency version=1 {
+  title "How the crates depend on one another"
+  desc "The cli crate depends on piles and storage, and piles depends on storage."
+
+  box cli sub="crates/cli" pile:id="4f1c2a9be07d4c35a8e6b1d2f3a40c57"
+  box piles sub="crates/piles"
+  box storage sub="crates/storage" docs:page="storage.md" docs:reviewed=#true focal=#true
+
+  line cli piles docs:section=1
+  line cli storage docs:section=4
+  line piles storage
+
+  meta docs {
+    index "crates.md" depth=3
+    owners {
+      team "storage"
+    }
+  }
+}

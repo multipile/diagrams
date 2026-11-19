@@ -403,74 +403,6 @@ fn a_document_carries_each_elements_key_and_each_lines_two_keys() {
 }
 
 #[test]
-fn version_1_reads_a_pile_and_its_id_into_metadata() {
-    // Every case written with `pile=` keeps it, as `pile:ref`, where it
-    // was written.
-    let mut seen = 0;
-    for case in all_cases() {
-        let diagram = case.diagram();
-        let refs: Vec<&Meta> = items(&diagram)
-            .into_iter()
-            .flat_map(|item| &item.meta)
-            .filter(|meta| (meta.owner.as_str(), meta.key.as_str()) == ("pile", "ref"))
-            .collect();
-        assert_eq!(refs.len(), case.source.matches(" pile=\"").count(), "{}", case.name);
-        for meta in refs {
-            let text = meta.value.as_text().unwrap();
-            assert_eq!(
-                &case.source[meta.span.offset..meta.span.offset + meta.span.len],
-                format!("pile={:?}", text.text),
-                "{}",
-                case.name
-            );
-            assert!(case.source[text.lines[0]..].starts_with(&text.text));
-            seen += 1;
-        }
-    }
-    assert!(seen >= 10, "the cases hold {seen} piles");
-
-    let id = "3f9c2b7e0a1d4c5e8f6a7b9c0d1e2f3a";
-    let source = boxed(
-        &format!("box cli pile=\"@cli\" id=\"{id}\" sub=\"crates/cli\""),
-        "  box docs pile=\":/docs\"\n  box plain id=\"not read without a pile\"\n",
-    );
-    let diagram = read(&source);
-    let boxes = items(&diagram);
-    assert_eq!(
-        written(&boxes[0].meta),
-        vec!["pile:ref=@cli".to_string(), format!("pile:id={id}")]
-    );
-    assert_eq!(written(&boxes[1].meta), vec!["pile:ref=:/docs"]);
-    assert!(boxes[2].meta.is_empty());
-    // A box with a pile and no name shows the pile's name, or its path.
-    assert_eq!(boxes[0].name, "cli");
-    assert_eq!(boxes[1].name, ":/docs");
-    assert_eq!(boxes[2].name, "plain");
-    let html = diagram_pipeline::page(&source, Animation::None).unwrap();
-    assert!(html.contains(&format!(
-        "data-id=\"box:cli\" data-pile-ref=\"@cli\" data-pile-id=\"{id}\""
-    )));
-    assert!(html.contains("data-pile-ref=\":/docs\""));
-    assert!(!html.contains("data-pile=\""));
-    // The two words are still held to what they were.
-    assert_eq!(codes(&boxed("box cli pile=\"cli\"", "")), vec!["pile-invalid"]);
-    assert_eq!(
-        codes(&boxed("box cli pile=\"@cli\" id=\"3f9c\"", "")),
-        vec!["pile-id-invalid"]
-    );
-    // And metadata written beside them is kept after them.
-    let diagram = read(&boxed("box cli docs:page=\"cli.md\" pile=\"@cli\"", ""));
-    assert_eq!(
-        written(&items(&diagram)[0].meta),
-        vec!["pile:ref=@cli", "docs:page=cli.md"]
-    );
-    assert_eq!(
-        codes(&boxed("box cli pile=\"@cli\" pile:ref=\"@other\"", "")),
-        vec!["property-repeated"]
-    );
-}
-
-#[test]
 fn only_what_makes_metadata_unreadable_is_refused() {
     for (first, rest, expected) in [
         ("box a docs:page:anchor=\"x\"", "", "meta-invalid"),
@@ -492,6 +424,8 @@ fn only_what_makes_metadata_unreadable_is_refused() {
         ),
         // Any other property a node does not know is what it was.
         ("box a colour=\"red\"", "", "property-unknown"),
+        ("box a pile=\"@a\"", "", "property-unknown"),
+        ("box a id=\"3f9c2b7e0a1d4c5e8f6a7b9c0d1e2f3a\"", "", "property-unknown"),
         ("box a", "  box b\n  line a b colour=\"red\"\n", "property-unknown"),
     ] {
         assert_eq!(codes(&boxed(first, rest)), vec![expected], "{first} {rest}");
