@@ -1,0 +1,21 @@
+version = "gitpile/1"
+
+[[edges]]
+type = "relies-on"
+target = "@format"
+title = "reads a diagram file with, as its first step"
+
+[[edges]]
+type = "relies-on"
+target = "@document"
+title = "paints the diagram into a document with"
+
+[[edges]]
+type = "relies-on"
+target = "@html"
+title = "writes the document as a page with"
+
+[[edges]]
+type = "relies-on"
+target = "@render"
+title = "renders the document as a picture with"

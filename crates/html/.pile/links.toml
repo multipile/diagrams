@@ -1,0 +1,6 @@
+version = "gitpile/1"
+
+[[edges]]
+type = "relies-on"
+target = "@document"
+title = "writes its document as a page, and embeds its fonts"
