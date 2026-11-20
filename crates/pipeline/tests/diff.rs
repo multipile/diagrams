@@ -483,3 +483,66 @@ fn a_diff_draws_what_its_report_says_and_decides_nothing() {
     let report = diagram_pipeline::compare(&case.before, &case.after).unwrap();
     assert_eq!(marked(&report, false).0, (3, 2, 1));
 }
+
+#[test]
+fn a_still_diff_leaves_out_a_removed_line_that_would_muddle_the_second_version() {
+    // guide is removed where diagrams is added, so neither guide nor the
+    // line to it is drawn: the line would seem to lead to diagrams. Both
+    // are still listed under the diagram.
+    let case = diff_cases().into_iter().find(|c| c.name == "a-crate-is-added").unwrap();
+    let report = diagram_pipeline::compare(&case.before, &case.after).unwrap();
+    let document = diagram_pipeline::diff_document(&case.before, &case.after, &report, false).unwrap();
+    let ids: Vec<&str> = document.nodes.iter().filter_map(|node| node.id.as_deref()).collect();
+    assert!(!ids.contains(&"box:guide"), "{ids:?}");
+    assert!(!ids.contains(&"line:pile->guide"), "{ids:?}");
+    let html = diagram_html::page(&document, &diagram_pipeline::Options::default());
+    assert!(html.contains("REMOVED: pile → guide · guide"));
+    // Animated, it still fades out.
+    let animated = diagram_pipeline::diff_document(&case.before, &case.after, &report, true).unwrap();
+    assert!(
+        animated
+            .nodes
+            .iter()
+            .any(|node| node.id.as_deref() == Some("line:pile->guide"))
+    );
+}
+
+#[test]
+fn a_still_diff_puts_each_lines_badge_clear_of_every_other_line() {
+    use diagram_document::document::Place;
+    for case in diff_cases() {
+        let report = diagram_pipeline::compare(&case.before, &case.after).unwrap();
+        let document = diagram_pipeline::diff_document(&case.before, &case.after, &report, false).unwrap();
+        let scene = diagram_document::layout(&diagram_pipeline::read(&case.after).unwrap().diagram);
+        for node in &document.nodes {
+            let (Some(id), Place::Absolute(at)) = (node.id.as_deref(), &node.place) else {
+                continue;
+            };
+            if !id.starts_with("line:") {
+                continue;
+            }
+            for badge in node
+                .children()
+                .iter()
+                .filter(|child| child.id.as_deref().is_some_and(|id| id.starts_with("badge:")))
+            {
+                let Place::Absolute(rect) = badge.place else { continue };
+                let rect = rect.translate(at.x, at.y);
+                for other in &scene.elements {
+                    let diagram_document::scene::Shape::Line(line) = &other.shape else {
+                        continue;
+                    };
+                    if other.id == id {
+                        continue;
+                    }
+                    assert!(
+                        line.points.windows(2).all(|s| !rect.crossed_by(s[0], s[1])),
+                        "{}: the badge of {id} sits on {}",
+                        case.name,
+                        other.id
+                    );
+                }
+            }
+        }
+    }
+}

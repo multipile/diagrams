@@ -9,8 +9,8 @@
 
 use std::fmt;
 
-pub use diagram_document::{self as document, Animation, Document, Report, Subject};
-pub use diagram_format::{self as format, Diagram, Findings, Read};
+pub use diagram_document::{self as document, Animation, Document, Hint, Report, Subject};
+pub use diagram_format::{self as format, Diagram, Finding, Findings, Read};
 pub use diagram_html::{self as html, Options};
 pub use diagram_render::{self as render, MotionFormat, Renderer, StillFormat};
 
@@ -56,6 +56,27 @@ impl From<diagram_render::RenderError> for Error {
 /// Reads a diagram file's text.
 pub fn read(source: &str) -> Result<Read, Error> {
     Ok(diagram_format::read(source)?)
+}
+
+/// What a file that reads chose that draws worse than another choice
+/// would, each at its line and column, with what to write instead. A hint
+/// never stops the file from being drawn.
+pub fn hints(source: &str) -> Result<Vec<Finding>, Error> {
+    let read = read(source)?;
+    Ok(diagram_document::hints(&read.diagram)
+        .into_iter()
+        .map(|hint| {
+            let (line, column) = diagram_format::finding::locate(source, hint.span.offset);
+            Finding {
+                code: hint.code,
+                message: hint.message,
+                help: Some(hint.help),
+                span: hint.span,
+                line,
+                column,
+            }
+        })
+        .collect())
 }
 
 /// A diagram file's document, still or revealed.

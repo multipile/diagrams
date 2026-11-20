@@ -1,0 +1,10 @@
+// expect: main-not-a-path at 9:3
+diagram state version=1 {
+  title "A main path that splits"
+  desc "The main path is one chain of transitions, and this one leaves a state twice."
+  state a "A" start=#true
+  state b "B"
+  state c "C"
+  transition a b on="go" main=#true
+  transition a c on="skip" main=#true
+}

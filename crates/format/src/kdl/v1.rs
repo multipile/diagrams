@@ -748,12 +748,14 @@ fn state(r: &mut Reader, children: &[KdlNode], frame: &mut FrameParts) -> Option
             }
         }
         "transition" => {
-            let usage = "transition <from> <to> on=\"<event>\" guard=\"<guard>\" action=\"<action>\" focal=#true";
-            let ends = ends(r, node, usage, &["on", "guard", "action", "focal"], false);
+            let usage =
+                "transition <from> <to> on=\"<event>\" guard=\"<guard>\" action=\"<action>\" focal=#true main=#true";
+            let ends = ends(r, node, usage, &["on", "guard", "action", "focal", "main"], false);
             let on = r.text_prop(node, "on");
             let guard = r.text_prop(node, "guard");
             let action = r.text_prop(node, "action");
             let focal = r.bool_prop(node, "focal");
+            let main = r.bool_prop(node, "main");
             let Some((from, to)) = ends else {
                 ok = false;
                 return;
@@ -775,6 +777,7 @@ fn state(r: &mut Reader, children: &[KdlNode], frame: &mut FrameParts) -> Option
                 guard,
                 action,
                 focal,
+                main,
                 span: span(node),
             });
         }

@@ -61,6 +61,10 @@ impl Rect {
             self.bottom().max(other.bottom()) - y,
         )
     }
+    /// Whether this rectangle and `other` share any of their inside.
+    pub fn overlaps(&self, other: &Rect) -> bool {
+        self.x < other.right() && other.x < self.right() && self.y < other.bottom() && other.y < self.bottom()
+    }
     /// Whether the segment from `a` to `b`, horizontal or vertical, passes
     /// through the inside of this rectangle.
     pub fn crossed_by(&self, a: Point, b: Point) -> bool {

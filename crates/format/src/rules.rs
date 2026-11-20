@@ -314,6 +314,7 @@ impl Rules<'_> {
                 self.focal.push(transition.span);
             }
         }
+        self.main_path(body);
         if let Some(any) = &body.from_any {
             self.names("states", &any.to, &keys, any.span);
             self.label(&any.on, any.span);
@@ -328,6 +329,69 @@ impl Rules<'_> {
                 "a state diagram has at most twice as many transitions as states",
                 "a transition every state makes is one `any`, not a line from each",
             );
+        }
+    }
+
+    /// The transitions marked `main` make one path: each goes from the
+    /// state the one before it went to, no state is left or entered twice
+    /// on it, and it never returns to a state it passed.
+    fn main_path(&mut self, body: &StateMachine) {
+        let main: Vec<&Transition> = body.transitions.iter().filter(|t| t.main).collect();
+        let wrong = |report: &mut crate::finding::Report, span: Span, message: &str| {
+            report.help(
+                "main-not-a-path",
+                span,
+                message,
+                "mark main=#true on one path of transitions, each from the state the one before it went to",
+            );
+        };
+        for (k, transition) in main.iter().enumerate() {
+            if transition.from == transition.to {
+                wrong(
+                    self.report,
+                    transition.span,
+                    "a transition back to its own state is not on the main path",
+                );
+                return;
+            }
+            if main[..k].iter().any(|other| other.from == transition.from) {
+                wrong(self.report, transition.span, "the main path leaves this state twice");
+                return;
+            }
+            if main[..k].iter().any(|other| other.to == transition.to) {
+                wrong(self.report, transition.span, "the main path enters this state twice");
+                return;
+            }
+        }
+        let first: Vec<&&Transition> = main
+            .iter()
+            .filter(|t| !main.iter().any(|other| other.to == t.from))
+            .collect();
+        match first.len() {
+            0 if !main.is_empty() => wrong(self.report, main[0].span, "the main path returns to where it starts"),
+            0 => {}
+            1 => {
+                // Walked from where it starts, it takes every transition
+                // marked main; one it never reaches is on a loop apart.
+                let mut at = first[0].from.as_str();
+                let mut walked: Vec<&str> = Vec::new();
+                while let Some(next) = main.iter().find(|t| t.from == at && !walked.contains(&t.from.as_str())) {
+                    walked.push(next.from.as_str());
+                    at = next.to.as_str();
+                }
+                if let Some(apart) = main.iter().find(|t| !walked.contains(&t.from.as_str())) {
+                    wrong(
+                        self.report,
+                        apart.span,
+                        "the main path is in pieces: this one does not follow on",
+                    );
+                }
+            }
+            _ => wrong(
+                self.report,
+                first[1].span,
+                "the main path is in pieces: this one does not follow on",
+            ),
         }
     }
 

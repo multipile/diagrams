@@ -437,6 +437,9 @@ pub struct Transition {
     pub guard: Option<String>,
     pub action: Option<String>,
     pub focal: bool,
+    /// On the main path: the one chain of transitions the file wants read
+    /// along the row, each from the state the one before it went to.
+    pub main: bool,
     pub span: Span,
 }
 

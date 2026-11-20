@@ -1,0 +1,16 @@
+// The boxes of a rank are drawn in the order written, and this order makes two lines cross: once, and never along one stretch.
+diagram dependency version=1 {
+  title "A web app and what it is built on"
+  desc "The web app uses its pages and its server; the pages use the icons, and the server the database."
+
+  box web "web"
+  box pages "pages"
+  box server "server"
+  box db "db"
+  box icons "icons"
+
+  line web pages
+  line web server
+  line pages icons
+  line server db
+}
