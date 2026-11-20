@@ -84,6 +84,26 @@ fn no_line_behind_a_box(case: &Case, scene: &Scene, ends: impl Fn(&str) -> Vec<S
     }
 }
 
+/// How many times a stretch of one route passes through a stretch of the
+/// other: a crossing, not where one ends on the other.
+fn passes_through(a: &[Point], b: &[Point]) -> usize {
+    let mut count = 0;
+    for s in a.windows(2) {
+        for t in b.windows(2) {
+            let (s_flat, t_flat) = (s[0].y == s[1].y, t[0].y == t[1].y);
+            if s_flat == t_flat {
+                continue;
+            }
+            let (flat, upright) = if s_flat { (s, t) } else { (t, s) };
+            let (x0, x1) = (flat[0].x.min(flat[1].x), flat[0].x.max(flat[1].x));
+            let (y0, y1) = (upright[0].y.min(upright[1].y), upright[0].y.max(upright[1].y));
+            let (x, y) = (upright[0].x, flat[0].y);
+            count += usize::from(x0 < x && x < x1 && y0 < y && y < y1);
+        }
+    }
+    count
+}
+
 /// The two keys a line's id names: `line:a->b`.
 fn line_ends(id: &str) -> Vec<String> {
     let rest = id.split_once(':').map_or(id, |(_, rest)| rest);
@@ -337,6 +357,59 @@ mod architecture {
         };
         assert_ne!(turn("line:posts->cache"), turn("line:auth->db"));
     }
+
+    #[test]
+    fn an_order_that_makes_lines_meet_is_hinted_and_drawn_as_written() {
+        for case in all_cases() {
+            if case.name.starts_with("invalid/") {
+                continue;
+            }
+            let hints = diagram_pipeline::hints(&case.source).unwrap_or_else(|error| panic!("{}:\n{error}", case.name));
+            if case.name.ends_with("a-rank-written-in-a-crossing-order") {
+                // Either rank, written the other way round, keeps every
+                // line apart.
+                let said: Vec<(usize, &str, &str)> = hints
+                    .iter()
+                    .map(|hint| (hint.line, hint.code, hint.help.as_deref().unwrap()))
+                    .collect();
+                assert_eq!(
+                    said,
+                    [
+                        (
+                            7,
+                            "rank-order-crosses",
+                            "write them in the order server, pages, and they meet nowhere"
+                        ),
+                        (
+                            9,
+                            "rank-order-crosses",
+                            "write them in the order icons, db, and they meet nowhere"
+                        ),
+                    ]
+                );
+                continue;
+            }
+            if !case.name.ends_with("a-line-shares-a-channel") {
+                assert!(hints.is_empty(), "{}: {hints:?}", case.name);
+                continue;
+            }
+            // Either tier, in the other order, has no line cross another.
+            let said: Vec<(usize, &str)> = hints
+                .iter()
+                .map(|hint| (hint.line, hint.help.as_deref().unwrap()))
+                .collect();
+            assert_eq!(
+                said,
+                [
+                    (14, "write `tier auth posts`, and they meet nowhere"),
+                    (15, "write `tier cache db`, and they meet nowhere"),
+                ]
+            );
+            assert!(hints.iter().all(|hint| hint.code == "tier-order-crosses"));
+            let rewritten = case.source.replace("tier db cache", "tier cache db");
+            assert!(diagram_pipeline::hints(&rewritten).unwrap().is_empty());
+        }
+    }
 }
 
 mod sequence {
@@ -470,9 +543,54 @@ mod state {
         let scene = laid_out(&case);
         let x = |key: &str| rect(&scene, &format!("state:{key}")).x;
         assert!(x("written") < x("read"));
-        assert!(x("read") < x("refused"));
-        assert!(x("refused") < x("rendered"));
+        assert!(x("read") < x("rendered"));
         assert!(x("rendered") < x("stale"));
+        assert!(x("written") < x("refused"));
+    }
+
+    #[test]
+    fn the_main_path_runs_straight_along_the_row() {
+        let case = cases("state")
+            .into_iter()
+            .find(|c| c.name.ends_with("a-diagram-file"))
+            .unwrap();
+        let scene = laid_out(&case);
+        // written, read and rendered are marked main: side by side, and
+        // each transition between them one straight stretch.
+        let mut states: Vec<(i32, String)> = boxes(&scene)
+            .into_iter()
+            .filter(|(id, _)| id.starts_with("state:"))
+            .map(|(id, rect)| (rect.x, id.trim_start_matches("state:").to_string()))
+            .collect();
+        states.sort();
+        let row: Vec<&str> = states.iter().map(|(_, key)| key.as_str()).collect();
+        let at = row.iter().position(|key| *key == "written").unwrap();
+        assert_eq!(row[at..at + 3], ["written", "read", "rendered"], "{row:?}");
+        for id in ["transition:written->read:read", "transition:read->rendered:render"] {
+            let (_, line) = lines(&scene).into_iter().find(|(other, _)| *other == id).unwrap();
+            assert_eq!(line.points.len(), 2, "{id} is not straight");
+        }
+    }
+
+    #[test]
+    fn no_transition_crosses_another() {
+        for case in cases("state") {
+            let scene = laid_out(&case);
+            let all: Vec<_> = lines(&scene)
+                .into_iter()
+                .filter(|(id, _)| id.starts_with("transition:"))
+                .collect();
+            for (k, (a, first)) in all.iter().enumerate() {
+                for (b, second) in &all[k + 1..] {
+                    assert_eq!(
+                        passes_through(&first.points, &second.points),
+                        0,
+                        "{}: {a} crosses {b}",
+                        case.name
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -818,6 +936,43 @@ mod dependency {
                         case.name,
                         line.to,
                         line.from
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn no_line_meets_another() {
+        // A line that goes round the ranks between leaves and enters on the
+        // side of its lane, and the turns in a channel are in the order
+        // that keeps lines apart: no two lines of a case meet.
+        for case in cases("dependency") {
+            if case.name.ends_with("a-rank-written-in-a-crossing-order") {
+                // Its order makes two lines cross: they cross once, and
+                // never run along one stretch.
+                let scene = laid_out(&case);
+                let all = lines(&scene);
+                let met: usize = all
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(k, (_, a))| all[k + 1..].iter().map(move |(_, b)| meetings(&a.points, &b.points)))
+                    .sum();
+                assert_eq!(met, 1, "{}", case.name);
+                continue;
+            }
+            let scene = laid_out(&case);
+            let all: Vec<_> = lines(&scene)
+                .into_iter()
+                .filter(|(id, _)| id.starts_with("line:"))
+                .collect();
+            for (k, (a, first)) in all.iter().enumerate() {
+                for (b, second) in &all[k + 1..] {
+                    assert_eq!(
+                        meetings(&first.points, &second.points),
+                        0,
+                        "{}: {a} and {b} meet",
+                        case.name
                     );
                 }
             }

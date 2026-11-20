@@ -1,5 +1,8 @@
 //! States, and the events that move between them. States are laid out along
-//! the flow, in the order the transitions reach them from the start. A
+//! the flow, in the order the transitions reach them from the start. The
+//! states of the main path the file marks sit side by side, so it runs
+//! straight; otherwise, and around it, states come in the order whose arcs
+//! cross the fewest times. A
 //! transition to the next state is a straight line; one further on arcs
 //! over the states between, and one back runs under them. A transition from
 //! a state to itself loops over it. A filled dot leads into the start, and
@@ -102,51 +105,23 @@ pub fn layout(body: &StateMachine, canvas: &mut Canvas) {
     }
 
     // Every transition that is not drawn straight goes around: over the
-    // states or under them. One forward goes over and one back goes under,
-    // unless that side already holds an arc it would cross; shorter arcs
-    // are placed first, so they take the inner tracks.
-    let mut arcs: Vec<(usize, Side, i32)> = Vec::new();
-    let mut placed: Vec<(Side, usize, usize, i32)> = Vec::new();
-    let mut around_order: Vec<usize> = (0..body.transitions.len())
-        .filter(|&n| {
-            let t = &body.transitions[n];
-            let (a, b) = (index[t.from.as_str()], index[t.to.as_str()]);
-            b != a + 1
-        })
+    // states or under them.
+    let spans: Vec<(usize, usize)> = body
+        .transitions
+        .iter()
+        .map(|t| (index[t.from.as_str()], index[t.to.as_str()]))
         .collect();
-    around_order.sort_by_key(|&n| {
-        let t = &body.transitions[n];
-        (index[t.from.as_str()].abs_diff(index[t.to.as_str()]), n)
-    });
-    for n in around_order {
-        let t = &body.transitions[n];
-        let (a, b) = (index[t.from.as_str()], index[t.to.as_str()]);
-        let (lo, hi) = (a.min(b), a.max(b));
-        let crosses = |side: Side| {
-            placed
-                .iter()
-                .any(|(s, l, h, _)| *s == side && ((*l < lo && lo < *h && *h < hi) || (lo < *l && *l < hi && hi < *h)))
-        };
-        let preferred = if b >= a { upper } else { lower };
-        let other = if preferred == upper { lower } else { upper };
-        let side = if a != b && crosses(preferred) && !crosses(other) {
-            other
-        } else {
-            preferred
-        };
-        let track = placed
-            .iter()
-            .filter(|(s, l, h, _)| *s == side && *l <= hi && lo <= *h)
-            .map(|(_, _, _, track)| track + 1)
-            .max()
-            .unwrap_or(0);
-        placed.push((side, lo, hi, track));
-        arcs.push((n, side, track));
-    }
+    let (arcs, _) = arcs(&spans);
+    let side_of = |over: bool| if over { upper } else { lower };
+    let placed: Vec<(Side, i32)> = arcs.iter().map(|(_, over, track)| (side_of(*over), *track)).collect();
+    let arcs: Vec<(usize, Side, i32)> = arcs
+        .into_iter()
+        .map(|(n, over, track)| (n, side_of(over), track))
+        .collect();
     let lower_tracks = placed
         .iter()
-        .filter(|(side, ..)| *side == lower)
-        .map(|(.., track)| track + 1)
+        .filter(|(side, _)| *side == lower)
+        .map(|(_, track)| track + 1)
         .max()
         .unwrap_or(0);
 
@@ -259,36 +234,196 @@ pub fn layout(body: &StateMachine, canvas: &mut Canvas) {
     }
 }
 
-/// The states in the order the transitions reach them from the start, and
-/// then those they never reach, in the order written.
+/// How each transition that is not drawn straight goes around, given the
+/// places of its two states along the flow: its index, whether it goes
+/// over the states, and its track, counted out from them. And how many
+/// pairs of arcs on one side cross. One forward goes over and one back goes
+/// under, unless that side already holds an arc it would cross; shorter
+/// arcs are placed first, so they take the inner tracks.
+fn arcs(spans: &[(usize, usize)]) -> (Vec<(usize, bool, i32)>, usize) {
+    let mut arcs: Vec<(usize, bool, i32)> = Vec::new();
+    let mut placed: Vec<(bool, usize, usize, i32)> = Vec::new();
+    let mut crossed = 0;
+    let mut around: Vec<usize> = (0..spans.len()).filter(|&n| spans[n].1 != spans[n].0 + 1).collect();
+    around.sort_by_key(|&n| (spans[n].0.abs_diff(spans[n].1), n));
+    for n in around {
+        let (a, b) = spans[n];
+        let (lo, hi) = (a.min(b), a.max(b));
+        let crossing = |over: bool| {
+            placed
+                .iter()
+                .filter(|(s, l, h, _)| {
+                    *s == over && ((*l < lo && lo < *h && *h < hi) || (lo < *l && *l < hi && hi < *h))
+                })
+                .count()
+        };
+        let preferred = b >= a;
+        let over = if a != b && crossing(preferred) > 0 && crossing(!preferred) == 0 {
+            !preferred
+        } else {
+            preferred
+        };
+        crossed += crossing(over);
+        let track = placed
+            .iter()
+            .filter(|(s, l, h, _)| *s == over && *l <= hi && lo <= *h)
+            .map(|(_, _, _, track)| track + 1)
+            .max()
+            .unwrap_or(0);
+        placed.push((over, lo, hi, track));
+        arcs.push((n, over, track));
+    }
+    (arcs, crossed)
+}
+
+/// The most orders of the states that are tried.
+const ORDERS: usize = 720;
+
+/// The states in the order the transitions reach them from the start, then
+/// those they never reach, as they are drawn along the row.
+///
+/// When the file marks a main path, its states sit side by side in its
+/// order, so that it reads straight along the row, and the start comes
+/// first; every other state may come anywhere else. Otherwise the states
+/// reached in the same number of steps, and those never reached, may come
+/// in any order among themselves. Of the orders allowed, the layout takes
+/// the one whose arcs cross the fewest times, and the order the states are
+/// reached in when no order crosses fewer.
 fn order(body: &StateMachine) -> Vec<&str> {
-    let mut order: Vec<&str> = Vec::new();
-    let mut queue: VecDeque<&str> = body
+    let reached = reached(body);
+    let path = main_path(body);
+    // The units that move together, in the order reached, and the runs of
+    // units that may come in any order among themselves.
+    let mut runs: Vec<Vec<Vec<&str>>> = Vec::new();
+    if path.is_empty() {
+        let mut last = None;
+        for (key, steps) in &reached {
+            if last != Some(*steps) || runs.is_empty() {
+                runs.push(Vec::new());
+            }
+            runs.last_mut().unwrap().push(vec![*key]);
+            last = Some(*steps);
+        }
+    } else {
+        let mut units: Vec<Vec<&str>> = Vec::new();
+        for (key, _) in &reached {
+            if !path.contains(key) {
+                units.push(vec![*key]);
+            } else if !units.iter().any(|unit| unit.contains(key)) {
+                units.push(path.clone());
+            }
+        }
+        let rest = units.split_off(1.min(units.len()));
+        runs.push(units);
+        runs.push(rest);
+    }
+    let crossed = |order: &[&str]| {
+        let index: BTreeMap<&str, usize> = order.iter().enumerate().map(|(i, key)| (*key, i)).collect();
+        let spans: Vec<(usize, usize)> = body
+            .transitions
+            .iter()
+            .map(|t| (index[t.from.as_str()], index[t.to.as_str()]))
+            .collect();
+        arcs(&spans).1
+    };
+    let mut candidates: Vec<Vec<&str>> = vec![Vec::new()];
+    for run in &runs {
+        let orders = permutations(run);
+        if candidates.len() * orders.len() > ORDERS {
+            candidates
+                .iter_mut()
+                .for_each(|candidate| candidate.extend(run.iter().flatten()));
+            continue;
+        }
+        candidates = candidates
+            .iter()
+            .flat_map(|candidate| {
+                orders.iter().map(move |order| {
+                    let mut next = candidate.clone();
+                    next.extend(order.iter().flatten());
+                    next
+                })
+            })
+            .collect();
+    }
+    // The first candidate is in the order reached; another is taken only
+    // when its arcs cross fewer times.
+    candidates
+        .into_iter()
+        .enumerate()
+        .min_by_key(|(n, order)| (crossed(order), *n))
+        .map(|(_, order)| order)
+        .unwrap_or_default()
+}
+
+/// The states of the main path, in its order, or none when the file marks
+/// no main path. The format holds the transitions marked main to one path.
+fn main_path(body: &StateMachine) -> Vec<&str> {
+    let main: Vec<_> = body.transitions.iter().filter(|t| t.main).collect();
+    let Some(first) = main.iter().find(|t| !main.iter().any(|other| other.to == t.from)) else {
+        return Vec::new();
+    };
+    let mut path = vec![first.from.as_str()];
+    while let Some(next) = main.iter().find(|t| Some(&t.from.as_str()) == path.last()) {
+        if path.contains(&next.to.as_str()) {
+            break;
+        }
+        path.push(next.to.as_str());
+    }
+    path
+}
+
+/// Every order of `keys`, the order given first.
+fn permutations<T: Clone>(keys: &[T]) -> Vec<Vec<T>> {
+    if keys.len() <= 1 {
+        return vec![keys.to_vec()];
+    }
+    let mut all = Vec::new();
+    for (index, key) in keys.iter().enumerate() {
+        let mut rest = keys.to_vec();
+        rest.remove(index);
+        for mut order in permutations(&rest) {
+            order.insert(0, key.clone());
+            all.push(order);
+        }
+    }
+    all
+}
+
+/// The states in the order the transitions reach them from the start, then
+/// those they never reach, in the order written, each with how many steps
+/// from the start it is first reached in, and none for a state never
+/// reached. The state every state moves to is reached a step after the
+/// last state the start reaches.
+fn reached(body: &StateMachine) -> Vec<(&str, Option<usize>)> {
+    let mut order: Vec<(&str, Option<usize>)> = Vec::new();
+    let seen = |order: &[(&str, Option<usize>)], key: &str| order.iter().any(|(k, _)| *k == key);
+    let mut queue: VecDeque<(&str, usize)> = body
         .states
         .iter()
         .filter(|state| state.start)
-        .map(|state| state.item.key.as_str())
+        .map(|state| (state.item.key.as_str(), 0))
         .collect();
-    while let Some(key) = queue.pop_front() {
-        if order.contains(&key) {
+    while let Some((key, steps)) = queue.pop_front() {
+        if seen(&order, key) {
             continue;
         }
-        order.push(key);
+        order.push((key, Some(steps)));
         for transition in body.transitions.iter().filter(|t| t.from == key) {
-            if !order.contains(&transition.to.as_str()) {
-                queue.push_back(transition.to.as_str());
+            if !seen(&order, &transition.to) {
+                queue.push_back((transition.to.as_str(), steps + 1));
             }
         }
         if let Some(any) = &body.from_any
-            && !order.contains(&any.to.as_str())
+            && !seen(&order, &any.to)
             && queue.is_empty()
         {
-            queue.push_back(any.to.as_str());
+            queue.push_back((any.to.as_str(), steps + 1));
         }
     }
     for state in &body.states {
-        if !order.contains(&state.item.key.as_str()) {
-            order.push(state.item.key.as_str());
+        if !seen(&order, &state.item.key) {
+            order.push((state.item.key.as_str(), None));
         }
     }
     order

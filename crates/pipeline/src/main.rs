@@ -8,7 +8,8 @@ use diagram_pipeline::{Animation, MotionFormat, Renderer, StillFormat};
 
 const USAGE: &str = "\
 usage:
-  diagram check <file>...                      read each file, and say what is wrong
+  diagram check <file>...                      read each file, and say what is wrong,
+                                               and what would draw better
   diagram render <file> -o <out> [--reveal]    a page (.html) or a picture (.png .webp),
                                                or the diagram revealed (.gif .apng, or .webp with --reveal)
   diagram diff <before> <after> -o <out>       the two versions as a page or a picture, changes marked,
@@ -124,8 +125,14 @@ fn run(args: &[String]) -> Result<(), String> {
             }
             let mut wrong = 0;
             for path in &flags.files {
-                match diagram_pipeline::read(&read(path)?) {
-                    Ok(read) => println!("{path}: {}, read", read.diagram.kind().word()),
+                let source = read(path)?;
+                match diagram_pipeline::read(&source) {
+                    Ok(read) => {
+                        println!("{path}: {}, read", read.diagram.kind().word());
+                        for hint in diagram_pipeline::hints(&source).map_err(|error| fail(path, error))? {
+                            println!("  hint: {hint}");
+                        }
+                    }
                     Err(error) => {
                         wrong += 1;
                         eprintln!("{}", fail(path, error));

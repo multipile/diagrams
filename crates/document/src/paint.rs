@@ -5,7 +5,7 @@
 use diagram_format::Look;
 
 use crate::Animation;
-use crate::diff::{Diff, Role};
+use crate::diff::{Diff, DiffElement, Role};
 use crate::document::*;
 use crate::geometry::{self, MARGIN};
 use crate::layout::NOTE_H;
@@ -53,16 +53,24 @@ pub fn diff_document(diff: &Diff, animated: bool) -> Document {
     let mut painter = Painter::default();
     let mark = animated.then(|| painter.track(Track::change(HIDDEN, Pose::REST, MARK_AT, MARK_MS, Ease::Out)));
     let mut nodes = vec![heading(&diff.scene)];
+    let drawn = |item: &DiffElement| {
+        animated
+            || !(item.role == Role::Old
+                // The first version's own, which the report does not say
+                // was removed, is no part of the second.
+                || item.role == Role::Removed && item.element.status == Status::Same
+                || item.role == Role::Removed && overlaps_second(diff, &item.element))
+    };
+    if !animated {
+        painter.marks = marks(
+            diff.elements
+                .iter()
+                .filter(|item| drawn(item))
+                .map(|item| &item.element),
+        );
+    }
     for item in &diff.elements {
-        if !animated && item.role == Role::Old {
-            continue;
-        }
-        // The first version's own, which the report does not say was
-        // removed, is no part of the second.
-        if !animated && item.role == Role::Removed && item.element.status == Status::Same {
-            continue;
-        }
-        if !animated && item.role == Role::Removed && overlaps_second(diff, &item.element) {
+        if !drawn(item) {
             continue;
         }
         let track = if animated {
@@ -161,6 +169,9 @@ enum Marking {
 struct Painter {
     tracks: Vec<Track>,
     reveals: Vec<(u32, usize)>,
+    /// Where a still diff puts the badge of a line with no label, by the
+    /// line's id: the point it sits up and to the right of.
+    marks: std::collections::BTreeMap<String, Point>,
 }
 
 impl Painter {
@@ -198,7 +209,7 @@ impl Painter {
                 .with_children(vec![Node::text(mono(&shape.text, 9.0, color))])
             }
             Shape::Dot(shape) => dot(shape),
-            Shape::Line(shape) => line_node(shape, status, marking),
+            Shape::Line(shape) => line_node(shape, status, marking, self.marks.get(&element.id).copied()),
         };
         node.id = Some(element.id.clone());
         match &element.shape {
@@ -560,7 +571,7 @@ fn dot(shape: &scene::DotShape) -> Node {
 /// each bend a box with two borders and one rounded corner, and the
 /// arrowhead a box whose borders meet in a triangle, or two borders turned
 /// to a point.
-fn line_node(shape: &LineShape, status: Status, marking: &Marking) -> Node {
+fn line_node(shape: &LineShape, status: Status, marking: &Marking, mark: Option<Point>) -> Node {
     let bounds = Shape::Line(shape.clone()).bounds().grow(8);
     let (ox, oy) = (bounds.x, bounds.y);
     let still = matches!(marking, Marking::Still | Marking::Ghost);
@@ -605,7 +616,7 @@ fn line_node(shape: &LineShape, status: Status, marking: &Marking) -> Node {
             Point::new(rect.right(), rect.y)
         }
         None => {
-            let at = geometry::label_point(&shape.points);
+            let at = mark.unwrap_or_else(|| geometry::label_point(&shape.points));
             Point::new(at.x - ox + 4, at.y - oy - 8)
         }
     };
@@ -740,11 +751,69 @@ fn chevron(points: &[Point], width: i32, color: Rgba) -> Node {
     )
 }
 
+/// Where the badge of each marked line with no label sits in a still
+/// diff, by the line's id: on the first place along it, its longest
+/// stretches first, where the badge is clear of every other line, every
+/// box and every badge before it. A line with no such place keeps its
+/// badge at the middle of its longest stretch.
+fn marks<'e>(drawn: impl Iterator<Item = &'e Element> + Clone) -> std::collections::BTreeMap<String, Point> {
+    const SIZE: i32 = 18;
+    let badge = |at: Point| Rect::new(at.x, at.y - SIZE + 2, SIZE, SIZE).grow(2);
+    let mut placed: Vec<Rect> = Vec::new();
+    let mut marks = std::collections::BTreeMap::new();
+    for element in drawn.clone() {
+        let Shape::Line(line) = &element.shape else {
+            continue;
+        };
+        if element.status == Status::Same || line.label.is_some() {
+            continue;
+        }
+        let clear = |rect: Rect| {
+            drawn
+                .clone()
+                .filter(|other| other.id != element.id)
+                .all(|other| match &other.shape {
+                    Shape::Line(other) => other.points.windows(2).all(|s| !rect.crossed_by(s[0], s[1])),
+                    Shape::Box(other) => !rect.overlaps(&other.rect),
+                    _ => true,
+                })
+                && placed.iter().all(|other| !rect.overlaps(other))
+        };
+        let mut stretches: Vec<(Point, Point)> = line.points.windows(2).map(|s| (s[0], s[1])).collect();
+        stretches.sort_by_key(|(a, b)| -((a.x - b.x).abs() + (a.y - b.y).abs()));
+        let along = |(a, b): (Point, Point), k: i32| Point::new(a.x + (b.x - a.x) * k / 8, a.y + (b.y - a.y) * k / 8);
+        let spot = stretches
+            .iter()
+            .flat_map(|stretch| [4, 2, 6, 3, 5, 1, 7].map(|k| along(*stretch, k)))
+            .find(|at| clear(badge(*at)));
+        if let Some(at) = spot {
+            placed.push(badge(at));
+            marks.insert(element.id.clone(), at);
+        }
+    }
+    marks
+}
+
 /// Whether a removed element sits where an element of the second version
-/// is drawn, so that drawing it faded would only muddle both.
+/// is drawn, so that drawing it faded would only muddle both. A removed box
+/// does when it covers one. A removed line does when it runs beside a line
+/// of the second version, or when a box at one of its ends is removed and
+/// not drawn: it would seem to lead to whatever is drawn there now.
 fn overlaps_second(diff: &Diff, removed: &Element) -> bool {
-    if matches!(removed.shape, Shape::Line(_)) {
-        return false;
+    if let Shape::Line(line) = &removed.shape {
+        let end_hidden = line.ends.as_ref().is_some_and(|(from, to)| {
+            diff.elements.iter().any(|item| {
+                item.role == Role::Removed
+                    && matches!(&item.element.shape, Shape::Box(shape)
+                        if shape.key.as_deref() == Some(from.as_str()) || shape.key.as_deref() == Some(to.as_str()))
+                    && overlaps_second(diff, &item.element)
+            })
+        });
+        return end_hidden
+            || diff.elements.iter().any(|item| {
+                !matches!(item.role, Role::Old | Role::Removed)
+                    && matches!(&item.element.shape, Shape::Line(other) if beside(&line.points, &other.points))
+            });
     }
     let bounds = removed.shape.bounds();
     diff.elements.iter().any(|item| {
@@ -755,6 +824,29 @@ fn overlaps_second(diff: &Diff, removed: &Element) -> bool {
                 && other.y < bounds.bottom()
                 && bounds.y < other.bottom()
         }
+    })
+}
+
+/// How near two lines may run side by side before they read as one.
+const BESIDE: i32 = 12;
+
+/// Whether two routes run side by side: a stretch of one along a stretch of
+/// the other, closer than [`BESIDE`], for longer than that.
+fn beside(a: &[Point], b: &[Point]) -> bool {
+    let span = |p: i32, q: i32| (p.min(q), p.max(q));
+    a.windows(2).any(|s| {
+        b.windows(2).any(|t| {
+            let (s_flat, t_flat) = (s[0].y == s[1].y, t[0].y == t[1].y);
+            if s_flat != t_flat {
+                return false;
+            }
+            let (gap, (s0, s1), (t0, t1)) = if s_flat {
+                ((s[0].y - t[0].y).abs(), span(s[0].x, s[1].x), span(t[0].x, t[1].x))
+            } else {
+                ((s[0].x - t[0].x).abs(), span(s[0].y, s[1].y), span(t[0].y, t[1].y))
+            };
+            gap < BESIDE && s1.min(t1) - s0.max(t0) > BESIDE
+        })
     })
 }
 

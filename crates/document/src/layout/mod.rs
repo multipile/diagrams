@@ -7,6 +7,7 @@
 //! makes room for the heading and the note when it is done.
 
 mod architecture;
+mod channel;
 mod dependency;
 mod nested;
 mod process;

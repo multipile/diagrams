@@ -30,7 +30,7 @@ diagram dependency version=1 {
 | Step | Crate | What it does |
 | --- | --- | --- |
 | Read | [`diagram-format`](crates/format) | Reads a `.diagram` file into a diagram, by the version of the format it says, and holds it to the rules every diagram and its type are held to. A file that breaks one is refused with every finding, each at its line and column, with what fixes it. It keeps the file's metadata as written, and never reads it. |
-| Document | [`diagram-document`](crates/document) | Lays the diagram out by its type's rules, and paints it into its complete document: every node placed and styled down to its colours, borders and fonts, lines drawn as boxes, and every animation (a reveal, or the diff of two versions) a track of keyframes. |
+| Document | [`diagram-document`](crates/document) | Lays the diagram out by its type's rules, and paints it into its complete document: every node placed and styled down to its colours, borders and fonts, lines drawn as boxes, and every animation (a reveal, or the diff of two versions) a track of keyframes. It hints where the file's own choice draws worse than another would. |
 | Page | [`diagram-html`](crates/html) | Writes the document as HTML that loads and runs nothing: a whole page, or one element to embed. Each node is a `<div>` with its style inline, and each track CSS keyframes. |
 | Picture | [`diagram-render`](crates/render) | Builds the document as takumi's nodes, property by property, and renders it to PNG or WebP, or frame by frame to an animated GIF, WebP or APNG. Takumi parses no HTML, SVG or CSS. |
 | End to end | [`diagram-pipeline`](crates/pipeline) | The steps as one call, the `diagram` command, and the tests that run every case through every step. |
@@ -53,13 +53,15 @@ box <key> "<name>" sub="<a second line>" as=plain focal=#true
 | --- | --- | --- | --- |
 | `architecture` | the parts of a system, and what talks to what | `flow`, `box` (which may hold up to 3 `box`), `tier <key>… zone="…" trust=#true`, `line <from> <to> label="…" kind=call\|link\|async\|optional` | 9 boxes, 12 lines, 3 zones |
 | `sequence` | messages between actors, in time order | `actor`, `call`/`reply`/`notify <from> <to> "<label>"`, `self <actor> "<label>"`, `opt`/`loop "<guard>" { … }`, `alt { case "<guard>" { … } case "else" { … } }` | 5 actors, 12 messages, 1 fragment, none inside another |
-| `state` | states, and the events that move between them | `flow`, `state <key> "<name>" start=#true end=#true`, `transition <from> <to> on="…" guard="…" action="…"`, `any <to> on="…"` | 9 states, 12 transitions |
+| `state` | states, and the events that move between them | `flow`, `state <key> "<name>" start=#true end=#true`, `transition <from> <to> on="…" guard="…" action="…" main=#true`, `any <to> on="…"` | 9 states, 12 transitions |
 | `swimlane` | the steps of a process, by who does each | `lane <key> "<name>" { step … }`, `line` | 5 lanes, 12 steps, 12 lines |
 | `process` | the same, with each step's tool and data | `column <key> "<label>"`, `lane <key> "<name>" badge=ABC { task <key> "<title>" column=<key> tool="…" in=file out=table }`, `line <from> <to> trigger=#true` | 6 lanes, 12 columns, 1 focal column and task |
 | `tree` | a parent and its children | `flow`, `item "<name>" { item … }` | 4 levels, 5 children of one parent |
 | `dependency` | what depends on what | `flow`, `box`, `line <from> <to>`, `cycle <from> <to>` | 9 boxes, 14 lines, 4 ranks, 1 cycle |
 | `nested` | scopes inside scopes | `level "<label>" { level … }` | 3 to 6 levels |
 | `treemap` | how a whole splits into parts, by size | `measure "…"`, `source "…"`, `part <key> "<name>" value=<n> short=ABC` | 4 to 8 parts |
+
+A file says what matters, and the layout makes the rest fit around it. A state diagram's states go along the row in the order the transitions reach them from the start, and `main=#true` marks the transitions of the path to read first: one chain, each from the state the one before it went to (`main-not-a-path` otherwise). Its states sit side by side, so it runs straight along the row, and every other state is placed where the fewest lines cross.
 
 [`crates/pipeline/cases/`](crates/pipeline/cases) holds several diagrams of every type, files that must be refused, and pairs to compare.
 
@@ -100,6 +102,13 @@ nix run github:multipile/diagrams -- render my.diagram -o my.png          # a pi
 nix run github:multipile/diagrams -- render my.diagram -o my.gif          # revealed, element by element
 nix run github:multipile/diagrams -- render my.diagram -o my.html         # a page that loads nothing
 nix run github:multipile/diagrams -- diff before.diagram after.diagram -o change.gif
+```
+
+`check` also gives hints: where the file's own choice draws worse than another it could make, at its line and column, with what to write instead. Boxes across the flow go in the order the file writes them: an architecture diagram's tiers as each `tier` lists them, and a dependency diagram's ranks as its `box`es come. A tier or a rank whose boxes, in another order, would have fewer lines cross, touch or run together is hinted with that order (`tier-order-crosses`, `rank-order-crosses`). A hint never stops a file from being drawn, and it is drawn as written.
+
+```
+my.diagram: architecture, read
+  hint: 15:3: tier-order-crosses: in this order, lines meet once (write `tier cache db`, and they meet nowhere)
 ```
 
 `render` and `diff` take `--at <ms>` for one moment of an animation, `--fps` and `--scale`. In a clone, `cargo run -p diagram-pipeline --` runs the same command.

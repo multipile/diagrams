@@ -26,6 +26,7 @@ pub mod diff;
 pub mod document;
 pub mod fonts;
 pub mod geometry;
+pub mod hint;
 pub mod layout;
 pub mod paint;
 pub mod scene;
@@ -35,6 +36,7 @@ use diagram_format::Diagram;
 
 pub use diff::{Diff, Report, Subject};
 pub use document::Document;
+pub use hint::{Hint, hints};
 pub use layout::layout;
 pub use scene::Scene;
 
@@ -129,7 +131,10 @@ pub fn compare(before: &Diagram, after: &Diagram) -> Result<Report, DiffError> {
 /// unchanged, though the two versions draw it differently: still, it is
 /// the second version's, with no mark. An element the report lists as
 /// changed is marked, though both versions draw it the same. An element of
-/// the first version alone is drawn, faded, only when the report lists it.
+/// the first version alone is drawn, faded, only when the report lists it,
+/// and, still, only where it muddles nothing of the second version: a box
+/// that covers one of its elements, a line that runs beside one of its
+/// lines or leads to a box left out, is only listed.
 /// [`compare`] gives the report of what is drawn differently.
 pub fn diff_document(
     before: &Diagram,
